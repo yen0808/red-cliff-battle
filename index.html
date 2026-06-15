@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>赤壁之戰 ‧ 3D 戰史劇場</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{ --gold:#d9b96c; --panel:rgba(10,14,22,.78); --line:rgba(255,255,255,.14); }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0a0e16;font-family:"Noto Serif TC","PMingLiU",serif;color:#e8e2d2}
+  canvas{display:block}
+  #loading{position:fixed;inset:0;background:#0a0e16;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99;gap:14px;transition:opacity .8s}
+  #loading.hide{opacity:0;pointer-events:none}
+  #loading .big{font-size:42px;font-weight:900;letter-spacing:14px;color:var(--gold)}
+  #loading .small{font-size:14px;color:#8d8467}
+  #titlebar{position:fixed;top:14px;left:18px;z-index:10;display:flex;align-items:center;gap:12px;pointer-events:none}
+  #titlebar .bar{width:5px;height:52px;background:linear-gradient(#f1d28a,#9c7a33);border-radius:3px}
+  #titlebar h1{font-size:30px;font-weight:900;letter-spacing:8px;text-shadow:0 2px 10px rgba(0,0,0,.8)}
+  #titlebar .sub{font-size:13px;color:#cdb97f;letter-spacing:2px;margin-top:2px}
+  #factions{position:fixed;left:18px;top:96px;z-index:10;display:flex;flex-direction:column;gap:8px;width:228px}
+  .fac{display:flex;gap:10px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--c);border-radius:8px;padding:8px 10px;backdrop-filter:blur(6px)}
+  .fac-flag{width:38px;height:46px;flex:none;background:var(--c);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:#fff;box-shadow:inset 0 0 0 2px rgba(255,255,255,.35);clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%)}
+  .fac-name{font-size:15px;font-weight:700}
+  .fac-gen{font-size:11px;color:#bdb49c;margin:1px 0 4px;line-height:1.4}
+  .bar{height:7px;background:rgba(255,255,255,.12);border-radius:4px;overflow:hidden}
+  .bar .fill{height:100%;background:var(--c);border-radius:4px;transition:width .3s}
+  .fac .num{font-size:11px;color:#d7cfba;margin-top:3px;font-variant-numeric:tabular-nums}
+  #legend{position:fixed;left:18px;bottom:96px;z-index:10;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:11px;color:#b9b09a;line-height:1.8;backdrop-filter:blur(6px)}
+  #legend b{color:var(--gold)}
+  #subtitle{position:fixed;left:50%;bottom:108px;transform:translateX(-50%);z-index:10;width:min(760px,86vw);text-align:center;pointer-events:none}
+  #subtitle .act{font-size:14px;color:var(--gold);letter-spacing:4px;margin-bottom:6px;text-shadow:0 1px 6px #000}
+  #subtitle .txt{font-size:16px;line-height:1.7;text-shadow:0 1px 4px #000,0 0 14px rgba(0,0,0,.9);background:rgba(5,8,14,.45);border-radius:8px;padding:8px 16px;display:inline-block}
+  #toasts{position:fixed;right:18px;top:96px;z-index:10;display:flex;flex-direction:column;gap:8px;width:270px}
+  .toast{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--c,#d9b96c);border-radius:8px;padding:9px 12px;backdrop-filter:blur(6px);animation:tin .45s ease;transition:opacity .8s,transform .8s}
+  .toast.out{opacity:0;transform:translateX(30px)}
+  .toast .tt{font-size:14px;font-weight:700}
+  .toast .td{font-size:12px;color:#bdb49c;margin-top:2px;line-height:1.5}
+  .toast .tk{font-size:10px;color:var(--gold);letter-spacing:2px}
+  @keyframes tin{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
+  #stratagem{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(60,40,5,.45),rgba(0,0,0,.72));transition:opacity .4s}
+  #stratagem.show{opacity:1}
+  #stratagem .s-tag{font-size:18px;letter-spacing:12px;color:#f5e2ad;border:1px solid #c9a85c;padding:4px 18px 4px 30px;border-radius:3px;margin-bottom:18px}
+  #stratagem .s-name{font-size:74px;font-weight:900;letter-spacing:20px;color:var(--gold);text-shadow:0 0 30px rgba(217,185,108,.7),0 4px 12px #000;transform:scale(.8);transition:transform .5s cubic-bezier(.2,1.6,.4,1)}
+  #stratagem.show .s-name{transform:scale(1)}
+  #stratagem .s-by{font-size:20px;color:#e8dcb8;margin-top:16px;letter-spacing:4px}
+  #stratagem .s-desc{font-size:14px;color:#b9ad8d;margin-top:8px;letter-spacing:2px}
+  #flash{position:fixed;inset:0;z-index:19;background:#fff;opacity:0;pointer-events:none}
+  #endcard{position:fixed;inset:0;z-index:25;display:none;align-items:center;justify-content:center;background:rgba(4,6,10,.82)}
+  #endcard.show{display:flex}
+  #endcard .card{width:min(560px,90vw);background:linear-gradient(160deg,#171d2b,#0c1018);border:1px solid #c9a85c;border-radius:12px;padding:34px 38px;text-align:center}
+  #endcard h2{font-size:34px;font-weight:900;letter-spacing:10px;color:var(--gold);margin-bottom:18px}
+  #endcard p{font-size:15px;line-height:2;color:#d7cfba;text-align:justify}
+  #endcard .stats{display:flex;justify-content:space-around;margin:20px 0;font-size:13px}
+  #endcard .stats b{display:block;font-size:20px;margin-bottom:4px}
+  #endcard button{margin-top:10px;font-family:inherit;font-size:16px;letter-spacing:4px;padding:10px 34px;background:var(--gold);color:#1a1408;border:none;border-radius:6px;cursor:pointer;font-weight:700}
+  #controls{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:11;width:min(900px,94vw);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;backdrop-filter:blur(8px)}
+  #controls .row{display:flex;align-items:center;gap:10px}
+  #controls button{font-family:inherit;background:rgba(255,255,255,.08);color:#e8e2d2;border:1px solid var(--line);border-radius:6px;padding:5px 12px;font-size:13px;cursor:pointer;white-space:nowrap}
+  #controls button:hover{background:rgba(255,255,255,.18)}
+  #controls button.on{background:var(--gold);color:#1a1408;font-weight:700}
+  #scrub{flex:1;accent-color:var(--gold);height:6px;cursor:pointer}
+  #phases{display:flex;gap:4px;margin-top:8px}
+  .ph{flex:1;font-family:inherit;font-size:11px;letter-spacing:1px;padding:4px 2px;background:rgba(255,255,255,.06);border:1px solid transparent;border-radius:5px;color:#a89f88;cursor:pointer;text-align:center}
+  .ph.on{background:rgba(217,185,108,.22);border-color:var(--gold);color:var(--gold);font-weight:700}
+  .ph:hover{background:rgba(255,255,255,.15)}
+  @media (max-width:760px){
+    #factions{width:170px;transform:scale(.85);transform-origin:top left}
+    #legend{display:none}
+    #titlebar h1{font-size:22px}
+    #stratagem .s-name{font-size:46px;letter-spacing:10px}
+    .ph{font-size:9px;letter-spacing:0}
+    #toasts{width:200px;transform:scale(.9);transform-origin:top right}
+  }
+</style>
+</head>
+<body>
+<div id="loading"><div class="big">赤壁之戰</div><div class="small" style="color:#8d8467;letter-spacing:4px">建安十三年 ‧ 西元 208 年</div><div class="small" id="loadmsg" style="color:#5d5a4e">載入 3D 引擎中…</div></div>
+<div id="titlebar"><div class="bar"></div><div><h1>赤壁之戰</h1><div class="sub" id="dateLabel">建安十三年（208年）</div></div></div>
+<div id="factions"></div>
+<div id="legend"><b>操作</b>：左鍵拖曳＝旋轉視角｜滾輪＝縮放｜右鍵拖曳＝平移<br><b>提示</b>：拖曳畫面即切換為自由視角；按「電影運鏡」恢復自動<br><b>圖例</b>：<span style="color:#5b9bff">■曹操</span>　<span style="color:#ff6b5e">■孫權</span>　<span style="color:#6fd66f">■劉備</span>　｜畫面上方為北</div>
+<div id="subtitle"><div class="act" id="actLabel"></div><div class="txt" id="narration"></div></div>
+<div id="toasts"></div>
+<div id="stratagem"><div class="s-tag">計策發動</div><div class="s-name"></div><div class="s-by"></div><div class="s-desc"></div></div>
+<div id="flash"></div>
+<div id="endcard"><div class="card">
+  <h2>赤壁之戰 ‧ 終</h2>
+  <div class="stats">
+    <div style="color:#5b9bff"><b>曹操軍</b>22萬 → 約6萬<br>燒溺戰歿過半</div>
+    <div style="color:#ff6b5e"><b>孫權軍</b>3萬<br>傷亡輕微</div>
+    <div style="color:#6fd66f"><b>劉備軍</b>2萬<br>傷亡輕微</div>
+  </div>
+  <p>孫劉聯軍以五萬之眾大破曹操二十餘萬大軍，曹操退回北方，再無力短期內南征。此戰奠定魏、蜀、吳三國鼎立之勢，是中國歷史上以少勝多、以火攻取勝的經典戰役。</p>
+  <button id="btnReplay">重看一次</button>
+</div></div>
+<div id="controls">
+  <div class="row">
+    <button id="btnPlay">⏸ 暫停</button>
+    <button id="btnSpeed">速度 1×</button>
+    <button id="btnCam" class="on">🎥 電影運鏡</button>
+    <button id="btnRestart">⟲ 重播</button>
+    <input type="range" id="scrub" min="0" max="1000" value="0">
+    <span id="clock" style="font-size:12px;color:#a89f88;font-variant-numeric:tabular-nums">0:00</span>
+  </div>
+  <div id="phases"></div>
+</div>
+
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+
+/* ============ 小工具 ============ */
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const smooth=t=>{t=clamp(t,0,1);return t*t*(3-2*t)};
+const tri=t=>1-Math.abs(1-2*clamp(t,0,1));
+function hash2(i,j){const n=Math.sin(i*127.1+j*311.7)*43758.5453;return n-Math.floor(n)}
+function vnoise(x,z){
+  const i=Math.floor(x),j=Math.floor(z),fx=x-i,fz=z-j,sx=fx*fx*(3-2*fx),sz=fz*fz*(3-2*fz);
+  return lerp(lerp(hash2(i,j),hash2(i+1,j),sx),lerp(hash2(i,j+1),hash2(i+1,j+1),sx),sz);
+}
+const fbm=(x,z)=>vnoise(x,z)*.6+vnoise(x*2.3,z*2.3)*.3+vnoise(x*5.1,z*5.1)*.1;
+
+/* 長江河道中心線（x 東西向） */
+const zc=x=>16*Math.sin(x*0.011)+6*Math.sin(x*0.027+1.7);
+function groundH(x,z){
+  const d=Math.abs(z-zc(x));
+  let h;
+  if(d<13)h=-3.2;
+  else if(d<20)h=lerp(-3.2,1.8,smooth((d-13)/7));
+  else h=1.8+fbm(x*0.045,z*0.045)*4.2+Math.max(0,d-58)*0.12;
+  // 赤壁紅色峭壁（南岸）
+  if(z>zc(x)){
+    const cx=14,czv=zc(14)+21;
+    const g=Math.exp(-(((x-cx)*(x-cx))/140+((z-czv)*(z-czv))/70));
+    h+=g*13;
+  }
+  // 華容道沼澤（西北）
+  const s=Math.exp(-(((x+70)*(x+70))/1100+((z+50)*(z+50))/520));
+  h=lerp(h,0.5,clamp(s*1.4,0,0.92));
+  return h;
+}
+function cliffW(x,z){ if(z<=zc(x))return 0; const g=Math.exp(-(((x-14)*(x-14))/140+((z-(zc(14)+21))*(z-(zc(14)+21)))/70)); return g; }
+function swampW(x,z){ return Math.exp(-(((x+70)*(x+70))/1100+((z+50)*(z+50))/520)); }
+
+/* ============ 場景基礎 ============ */
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.5,1500);
+camera.position.set(-200,90,120);
+const controls=new OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true;controls.dampingFactor=.08;
+controls.maxPolarAngle=Math.PI*0.49;controls.minDistance=8;controls.maxDistance=420;
+controls.enabled=false;
+
+const sun=new THREE.DirectionalLight(0xfff2dd,1.0);sun.position.set(120,160,60);scene.add(sun);
+const amb=new THREE.AmbientLight(0x99aabb,.55);scene.add(amb);
+const hemi=new THREE.HemisphereLight(0xbcd3e8,0x3a4030,.5);scene.add(hemi);
+const fireLight=new THREE.PointLight(0xff7722,0,160,1.6);fireLight.position.set(-12,8,0);scene.add(fireLight);
+scene.fog=new THREE.Fog(0x9db8cc,200,620);
+
+/* 各幕氣氛（天空、霧、光照） */
+const AMBS=[
+ {sky:0x9db8cc,sunI:1.0,sunC:0xfff2dd,ambI:.55,fog:[200,620]},
+ {sky:0x9db8cc,sunI:1.0,sunC:0xfff2dd,ambI:.55,fog:[200,620]},
+ {sky:0x93a9bd,sunI:.9,sunC:0xf2e8d8,ambI:.5,fog:[190,600]},
+ {sky:0xbfa98a,sunI:.85,sunC:0xffd9a0,ambI:.5,fog:[180,560]},
+ {sky:0xa28d74,sunI:.7,sunC:0xffc78a,ambI:.45,fog:[170,540]},
+ {sky:0x6f7d92,sunI:.5,sunC:0xcfd8e8,ambI:.42,fog:[150,500]},
+ {sky:0x1d2433,sunI:.18,sunC:0x8899cc,ambI:.3,fog:[130,460]},
+ {sky:0x6e7787,sunI:.5,sunC:0xd8d2c4,ambI:.45,fog:[160,520]},
+];
+const _c1=new THREE.Color(),_c2=new THREE.Color();
+function applyAmb(idx,t){
+  const a=AMBS[idx],p=AMBS[Math.max(0,idx-1)];
+  const m=smooth(t/0.25); // 每幕前 25% 漸變
+  _c1.setHex(p.sky).lerp(_c2.setHex(a.sky),m);
+  scene.background=_c1.clone();scene.fog.color.copy(_c1);
+  scene.fog.near=lerp(p.fog[0],a.fog[0],m);scene.fog.far=lerp(p.fog[1],a.fog[1],m);
+  sun.intensity=lerp(p.sunI,a.sunI,m);
+  sun.color.setHex(p.sunC).lerp(_c2.setHex(a.sunC),m);
+  amb.intensity=lerp(p.ambI,a.ambI,m);
+}
+
+/* ============ 地形 ============ */
+{
+  const W=360,D=250,SX=130,SZ=92;
+  const g=new THREE.PlaneGeometry(W,D,SX,SZ);g.rotateX(-Math.PI/2);
+  const pos=g.attributes.position,colors=new Float32Array(pos.count*3);
+  const cGrass1=new THREE.Color(0x5f8a4a),cGrass2=new THREE.Color(0x7aa25a),cSand=new THREE.Color(0xb7a77e),
+        cBed=new THREE.Color(0x5e564a),cRock=new THREE.Color(0x8d8273),cCliff=new THREE.Color(0x9c4a30),cSwamp=new THREE.Color(0x46583c);
+  const cc=new THREE.Color();
+  for(let i=0;i<pos.count;i++){
+    const x=pos.getX(i),z=pos.getZ(i),h=groundH(x,z);
+    pos.setY(i,h);
+    if(h<-0.4)cc.copy(cBed);
+    else if(h<0.7)cc.copy(cSand);
+    else{
+      cc.copy(cGrass1).lerp(cGrass2,fbm(x*.1+9,z*.1));
+      if(h>6.5)cc.lerp(cRock,clamp((h-6.5)/6,0,1));
+    }
+    const cw=cliffW(x,z);if(cw>0.18)cc.lerp(cCliff,clamp(cw*1.2,0,1));
+    const sw=swampW(x,z);if(sw>0.3&&h<2)cc.lerp(cSwamp,clamp(sw,0,.85));
+    colors[i*3]=cc.r;colors[i*3+1]=cc.g;colors[i*3+2]=cc.b;
+  }
+  g.setAttribute('color',new THREE.BufferAttribute(colors,3));
+  g.computeVertexNormals();
+  scene.add(new THREE.Mesh(g,new THREE.MeshLambertMaterial({vertexColors:true})));
+}
+/* 水面 */
+let water,waterPos,waterBase;
+{
+  const g=new THREE.PlaneGeometry(360,250,90,60);g.rotateX(-Math.PI/2);
+  water=new THREE.Mesh(g,new THREE.MeshPhongMaterial({color:0x1d4e6b,transparent:true,opacity:.88,shininess:120,specular:0x99ccee}));
+  water.position.y=0;scene.add(water);
+  waterPos=g.attributes.position;waterBase=waterPos.array.slice();
+}
+
+/* ============ 文字標籤 ============ */
+function makeTextSprite(text,{fs=46,color='#fff',bg=null,border=null,scale=1}={}){
+  const cv=document.createElement('canvas'),ctx=cv.getContext('2d');
+  const font=`900 ${fs}px "Noto Serif TC",serif`;ctx.font=font;
+  const w=ctx.measureText(text).width+fs*.9,h=fs*1.7;
+  cv.width=w;cv.height=h;ctx.font=font;ctx.textAlign='center';ctx.textBaseline='middle';
+  if(bg){ctx.fillStyle=bg;const r=h*.3;ctx.beginPath();ctx.roundRect(4,4,w-8,h-8,r);ctx.fill();
+    if(border){ctx.strokeStyle=border;ctx.lineWidth=4;ctx.stroke();}}
+  ctx.lineWidth=fs*.16;ctx.strokeStyle='rgba(0,0,0,.85)';ctx.strokeText(text,w/2,h/2+2);
+  ctx.fillStyle=color;ctx.fillText(text,w/2,h/2+2);
+  const tex=new THREE.CanvasTexture(cv);tex.anisotropy=4;
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
+  const s=scale*0.075;sp.scale.set(w*s,h*s,1);sp.renderOrder=5;
+  return sp;
+}
+function makeFlagTex(ch,colorHex){
+  const cv=document.createElement('canvas');cv.width=cv.height=128;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#'+colorHex.toString(16).padStart(6,'0');ctx.fillRect(0,0,128,128);
+  ctx.strokeStyle='rgba(255,255,255,.8)';ctx.lineWidth=7;ctx.strokeRect(6,6,116,116);
+  ctx.font='900 86px "Noto Serif TC",serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle='#fff';ctx.fillText(ch,64,70);
+  return new THREE.CanvasTexture(cv);
+}
+const FAC={
+  cao:{color:0x3b82f6,css:'#3b82f6',ch:'曹',name:'曹操軍'},
+  sun:{color:0xe04438,css:'#e04438',ch:'孫',name:'孫權軍'},
+  liu:{color:0x35a845,css:'#35a845',ch:'劉',name:'劉備軍'},
+};
+const flagTex={cao:makeFlagTex('曹',0x2563c4),sun:makeFlagTex('孫',0xc23227),liu:makeFlagTex('劉',0x2c8c3a)};
+
+/* 地名標籤 */
+const PLACES=[
+  ['江陵',-135,zc(-135)-14],['烏林',-15,zc(-15)-19],['赤壁',14,zc(14)+19],
+  ['樊口',100,zc(100)+16],['夏口',125,zc(125)-14],['華容道',-70,-50],['長　江',62,zc(62)],
+];
+for(const [name,x,z] of PLACES){
+  const y=Math.max(groundH(x,z),0);
+  const sp=makeTextSprite(name,{fs:46,color:name==='長　江'?'#bfe3ff':'#fff',scale:1.15});
+  sp.position.set(x,y+(name==='長　江'?2.5:9),z);scene.add(sp);
+  if(name!=='長　江'&&name!=='華容道'){
+    const pin=new THREE.Mesh(new THREE.CylinderGeometry(.12,.12,8,5),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.5}));
+    pin.position.set(x,y+4,z);scene.add(pin);
+    // 城鎮小屋
+    for(let k=0;k<5;k++){
+      const hx=x+(hash2(k,x)-.5)*8,hz=z+(hash2(k+9,z)-.5)*8,hy=groundH(hx,hz);
+      if(hy<0.5)continue;
+      const hut=new THREE.Mesh(new THREE.BoxGeometry(2.2,1.6,1.8),new THREE.MeshLambertMaterial({color:0x6e5d49}));
+      hut.position.set(hx,hy+.8,hz);scene.add(hut);
+      const roof=new THREE.Mesh(new THREE.ConeGeometry(1.8,1.2,4),new THREE.MeshLambertMaterial({color:0x4a3d30}));
+      roof.position.set(hx,hy+2.2,hz);roof.rotation.y=Math.PI/4;scene.add(roof);
+    }
+  }
+}
+/* 北方指標 */
+{
+  const sp=makeTextSprite('北',{fs:52,color:'#cfe0f0',scale:1});sp.position.set(150,10,-100);scene.add(sp);
+  const ar=new THREE.Mesh(new THREE.ConeGeometry(1.6,5,6),new THREE.MeshBasicMaterial({color:0xcfe0f0}));
+  ar.position.set(150,5,-104);ar.rotation.x=-Math.PI/2;scene.add(ar);
+}
+/* 樹木點綴 */
+{
+  const trunkG=new THREE.CylinderGeometry(.25,.35,2,5),crownG=new THREE.ConeGeometry(1.5,3.4,6);
+  const trunkM=new THREE.MeshLambertMaterial({color:0x5a4632}),crownM=new THREE.MeshLambertMaterial({color:0x3f6b35});
+  const n=160,trunks=new THREE.InstancedMesh(trunkG,trunkM,n),crowns=new THREE.InstancedMesh(crownG,crownM,n);
+  const m=new THREE.Matrix4();let cnt=0;
+  for(let i=0;i<400&&cnt<n;i++){
+    const x=(hash2(i,3)-.5)*340,z=(hash2(i,7)-.5)*230,h=groundH(x,z);
+    if(h<1.2||h>9||cliffW(x,z)>.2)continue;
+    const s=.8+hash2(i,11)*.8;
+    m.makeScale(s,s,s);m.setPosition(x,h+1,z);trunks.setMatrixAt(cnt,m);
+    m.makeScale(s,s,s);m.setPosition(x,h+2.2*s+1.2,z);crowns.setMatrixAt(cnt,m);
+    cnt++;
+  }
+  trunks.count=crowns.count=cnt;scene.add(trunks,crowns);
+}
+
+/* ============ 船艦 ============ */
+const hullMatBase=new THREE.MeshLambertMaterial({color:0x6b4a2f});
+function makeShip(fac,{large=false,fire=false}={}){
+  const g=new THREE.Group();const s=large?1.5:1;
+  const hullMat=hullMatBase.clone();
+  const hull=new THREE.Mesh(new THREE.BoxGeometry(6*s,1.3*s,2.2*s),hullMat);hull.position.y=.5*s;g.add(hull);
+  const bow=new THREE.Mesh(new THREE.ConeGeometry(1.1*s,2.4*s,4),hullMat);
+  bow.rotation.z=-Math.PI/2;bow.rotation.y=Math.PI/4;bow.position.set(4.1*s,.5*s,0);g.add(bow);
+  const deck=new THREE.Mesh(new THREE.BoxGeometry(2.6*s,1.4*s,1.8*s),new THREE.MeshLambertMaterial({color:0x8a6a45}));
+  deck.position.set(-1*s,1.8*s,0);g.add(deck);
+  const mast=new THREE.Mesh(new THREE.CylinderGeometry(.12*s,.16*s,6.5*s,5),new THREE.MeshLambertMaterial({color:0x4a3a28}));
+  mast.position.set(.8*s,4*s,0);g.add(mast);
+  const sailMat=new THREE.MeshLambertMaterial({color:fire?0xc9b98a:0xd8cba8,side:THREE.DoubleSide,transparent:true});
+  const sail=new THREE.Mesh(new THREE.PlaneGeometry(3.4*s,3.8*s),sailMat);
+  sail.position.set(.8*s,4.2*s,0);g.add(sail);
+  const flag=new THREE.Mesh(new THREE.PlaneGeometry(1.7*s,1.2*s),new THREE.MeshBasicMaterial({map:flagTex[fac],side:THREE.DoubleSide,transparent:true}));
+  flag.position.set(1.6*s,7.3*s,0);g.add(flag);
+  if(fire){ // 柴草膏油
+    for(let k=0;k<3;k++){
+      const hay=new THREE.Mesh(new THREE.BoxGeometry(1.4,.9,1.6),new THREE.MeshLambertMaterial({color:0xc8a84e}));
+      hay.position.set(-2.4+k*1.6,1.5,0);g.add(hay);
+    }
+  }
+  g.userData={fac,hullMat,sailMat,flag,burn:0,sink:0,baseColor:new THREE.Color(fire?0x6b4a2f:0x6b4a2f)};
+  scene.add(g);
+  return g;
+}
+/* 曹軍艦隊 40 艘（5列8行）＋旗艦 */
+const caoShips=[],caoChainOff=[],caoLooseOff=[];
+for(let r=0;r<5;r++)for(let c=0;c<8;c++){
+  const sh=makeShip('cao');caoShips.push(sh);
+  caoChainOff.push([(c-3.5)*6.2,(r-2)*4.8]);
+  caoLooseOff.push([(c-3.5)*6.2+(hash2(r,c)-.5)*4.5,(r-2)*4.8+(hash2(c,r+9)-.5)*4]);
+}
+const caoFlagship=makeShip('cao',{large:true});
+const caoFlagLabel=makeTextSprite('曹操 ‧ 旗艦',{fs:40,color:'#fff',bg:'rgba(37,99,196,.9)',scale:.85});
+caoFlagLabel.position.y=14;caoFlagship.add(caoFlagLabel);
+/* 孫權（周瑜）艦隊 18 艘＋旗艦 */
+const wuShips=[],wuOff=[];
+for(let r=0;r<3;r++)for(let c=0;c<6;c++){
+  const sh=makeShip('sun');wuShips.push(sh);
+  wuOff.push([(c-2.5)*7+(hash2(r+3,c)-.5)*3,(r-1)*6+(hash2(c+5,r)-.5)*3]);
+}
+const wuFlagship=makeShip('sun',{large:true});
+const wuFlagLabel=makeTextSprite('周瑜 ‧ 程普',{fs:40,color:'#fff',bg:'rgba(194,50,39,.9)',scale:.85});
+wuFlagLabel.position.y=14;wuFlagship.add(wuFlagLabel);
+/* 黃蓋火船 10 艘 */
+const fireShips=[];
+for(let i=0;i<10;i++)fireShips.push(makeShip('sun',{fire:true}));
+const hgLabel=makeTextSprite('黃蓋 ‧ 火船隊',{fs:40,color:'#fff',bg:'rgba(194,50,39,.9)',scale:.8});
+hgLabel.position.y=10;fireShips[4].add(hgLabel);
+/* 連環鐵索 */
+const chainEdges=[];
+for(let r=0;r<5;r++)for(let c=0;c<8;c++){
+  const i=r*8+c;
+  if(c<7)chainEdges.push([i,i+1]);
+  if(r<4)chainEdges.push([i,i+8]);
+}
+const chains=new THREE.InstancedMesh(new THREE.CylinderGeometry(.14,.14,1,5),new THREE.MeshLambertMaterial({color:0x2a2a2e}),chainEdges.length);
+chains.visible=false;scene.add(chains);
+const _m4=new THREE.Matrix4(),_v1=new THREE.Vector3(),_v2=new THREE.Vector3(),_q=new THREE.Quaternion(),_up=new THREE.Vector3(0,1,0);
+function updateChains(op){
+  chains.visible=op>0.01;if(!chains.visible)return;
+  chainEdges.forEach(([a,b],k)=>{
+    _v1.copy(caoShips[a].position);_v2.copy(caoShips[b].position);
+    const mid=_v1.clone().add(_v2).multiplyScalar(.5);mid.y=.6;
+    const d=_v1.distanceTo(_v2);
+    _q.setFromUnitVectors(_up,_v2.sub(_v1).normalize());
+    _m4.compose(mid,_q,new THREE.Vector3(op,d*.82,op));
+    chains.setMatrixAt(k,_m4);
+  });
+  chains.instanceMatrix.needsUpdate=true;
+}
+
+/* ============ 軍隊（陸軍） ============ */
+function makeArmy(fac,cols,rows,label){
+  const g=new THREE.Group();
+  const geo=new THREE.ConeGeometry(.42,1.6,5);geo.translate(0,.8,0);
+  const mesh=new THREE.InstancedMesh(geo,new THREE.MeshLambertMaterial({color:FAC[fac].color}),cols*rows);
+  const m=new THREE.Matrix4();let i=0;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    m.makeTranslation((c-(cols-1)/2)*1.5+(hash2(r,c)-.5)*.5,0,(r-(rows-1)/2)*1.5+(hash2(c,r)-.5)*.5);
+    mesh.setMatrixAt(i++,m);
+  }
+  g.add(mesh);
+  for(const bx of [-cols*.6,cols*.6]){
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,5.5,4),new THREE.MeshLambertMaterial({color:0x4a3a28}));
+    pole.position.set(bx,2.7,0);g.add(pole);
+    const fl=new THREE.Mesh(new THREE.PlaneGeometry(2.4,1.7),new THREE.MeshBasicMaterial({map:flagTex[fac],side:THREE.DoubleSide,transparent:true}));
+    fl.position.set(bx+1.1,4.9,0);g.add(fl);
+  }
+  const lb=makeTextSprite(label,{fs:40,color:'#fff',bg:FAC[fac].css==='#3b82f6'?'rgba(37,99,196,.9)':FAC[fac].css==='#e04438'?'rgba(194,50,39,.9)':'rgba(44,140,58,.9)',scale:.9});
+  lb.position.y=9;g.add(lb);
+  g.userData={mesh,total:cols*rows};
+  scene.add(g);
+  return g;
+}
+function armyAt(g,x,z,head=0,ratio=1){
+  g.position.set(x,groundH(x,z)+.1,z);
+  g.rotation.y=head;
+  g.userData.mesh.count=Math.max(1,Math.round(g.userData.total*clamp(ratio,0,1)));
+}
+function pathPos(pts,t){
+  t=clamp(t,0,1);
+  const segs=[];let total=0;
+  for(let i=0;i<pts.length-1;i++){const d=Math.hypot(pts[i+1][0]-pts[i][0],pts[i+1][1]-pts[i][1]);segs.push(d);total+=d;}
+  let dist=t*total;
+  for(let i=0;i<segs.length;i++){
+    if(dist<=segs[i]||i===segs.length-1){
+      const f=segs[i]?clamp(dist/segs[i],0,1):0;
+      const x=lerp(pts[i][0],pts[i+1][0],f),z=lerp(pts[i][1],pts[i+1][1],f);
+      const head=Math.atan2(-(pts[i+1][1]-pts[i][1]),pts[i+1][0]-pts[i][0])+Math.PI/2;
+      return [x,z,head];
+    }
+    dist-=segs[i];
+  }
+  return [pts[0][0],pts[0][1],0];
+}
+const caoArmy=makeArmy('cao',14,9,'曹操 ‧ 張遼 ‧ 徐晃');
+const liuArmy=makeArmy('liu',8,6,'劉備 ‧ 諸葛亮 ‧ 張飛');
+const wuMarines=makeArmy('sun',6,5,'孫權軍 ‧ 呂蒙');
+const guanYu=makeArmy('liu',5,4,'關羽');
+/* 曹軍烏林大營 */
+const campTents=[];
+{
+  const g=new THREE.Group();
+  for(let r=0;r<3;r++)for(let c=0;c<5;c++){
+    const tm=new THREE.MeshLambertMaterial({color:0xd8cdb0});
+    const tent=new THREE.Mesh(new THREE.ConeGeometry(1.7,2.2,6),tm);
+    const tx=(c-2)*4.6,tz=(r-1)*4.2;
+    tent.position.set(tx,1.1,tz);g.add(tent);
+    campTents.push({mesh:tent,mat:tm,burn:0});
+  }
+  const fl=new THREE.Mesh(new THREE.PlaneGeometry(3,2.1),new THREE.MeshBasicMaterial({map:flagTex.cao,side:THREE.DoubleSide,transparent:true}));
+  fl.position.set(0,6.5,0);g.add(fl);
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(.1,.1,7,4),new THREE.MeshLambertMaterial({color:0x4a3a28}));
+  pole.position.set(-1.4,3.5,0);g.add(pole);
+  const lb=makeTextSprite('烏林大營',{fs:38,color:'#fff',bg:'rgba(37,99,196,.9)',scale:.8});
+  lb.position.y=10;g.add(lb);
+  const cx=-26,czv=zc(-26)-24;
+  g.position.set(cx,groundH(cx,czv),czv);
+  g.visible=false;scene.add(g);
+  window.__camp=g;
+}
+const camp=window.__camp;
+
+/* ============ 粒子系統 ============ */
+function makeParticles(max,blending){
+  const g=new THREE.BufferGeometry();
+  const pos=new Float32Array(max*3),col=new Float32Array(max*4),siz=new Float32Array(max);
+  g.setAttribute('position',new THREE.BufferAttribute(pos,3).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('col',new THREE.BufferAttribute(col,4).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('size',new THREE.BufferAttribute(siz,1).setUsage(THREE.DynamicDrawUsage));
+  const mat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending,
+    vertexShader:`attribute float size;attribute vec4 col;varying vec4 vc;
+      void main(){vc=col;vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=size*(170./-mv.z);gl_Position=projectionMatrix*mv;}`,
+    fragmentShader:`varying vec4 vc;void main(){float d=length(gl_PointCoord-.5);float a=smoothstep(.5,.08,d)*vc.a;if(a<.01)discard;gl_FragColor=vec4(vc.rgb,a);}`});
+  const points=new THREE.Points(g,mat);points.frustumCulled=false;scene.add(points);
+  const P=[];for(let i=0;i<max;i++)P.push({a:false,x:0,y:0,z:0,vx:0,vy:0,vz:0,life:0,max:1,s:1,r:1,g:1,b:1,grow:0,grav:0,mode:0});
+  let head=0;
+  return {
+    spawn(o){const p=P[head];head=(head+1)%max;Object.assign(p,{a:true,grow:0,grav:0,mode:0},o);p.max=p.life;},
+    update(dt){
+      let n=0;
+      for(const p of P){
+        if(!p.a)continue;
+        p.life-=dt;if(p.life<=0){p.a=false;continue;}
+        p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;p.vy+=p.grav*dt;
+        const f=p.life/p.max;
+        pos[n*3]=p.x;pos[n*3+1]=p.y;pos[n*3+2]=p.z;
+        let r=p.r,gg=p.g,b=p.b,a=f*.9;
+        if(p.mode===1){r=1;gg=lerp(.15,.8,f);b=lerp(.02,.25,f);a=f*.95;} // 火：黃→紅
+        else if(p.mode===2)a=f*.3; // 煙
+        else if(p.mode===3)a=Math.min(1,f*2)*.5; // 風
+        col[n*4]=r;col[n*4+1]=gg;col[n*4+2]=b;col[n*4+3]=a;
+        siz[n]=p.s*(1+p.grow*(1-f));
+        n++;
+      }
+      g.attributes.position.needsUpdate=true;g.attributes.col.needsUpdate=true;g.attributes.size.needsUpdate=true;
+      g.setDrawRange(0,n);
+    }
+  };
+}
+const fireP=makeParticles(2600,THREE.AdditiveBlending);
+const smokeP=makeParticles(1400,THREE.NormalBlending);
+const windP=makeParticles(700,THREE.NormalBlending);
+function spawnFireAt(x,y,z,inten){
+  fireP.spawn({x:x+(Math.random()-.5)*3,y:y+Math.random()*1.5,z:z+(Math.random()-.5)*2,
+    vx:(Math.random()-.5)*1.5-windNow*4,vy:3+Math.random()*4,vz:(Math.random()-.5)*1.5-windNow*2.5,
+    life:.5+Math.random()*.7,s:(2.4+Math.random()*2.4)*inten,mode:1});
+  if(Math.random()<.5)smokeP.spawn({x,y:y+2.5,z,vx:-windNow*7+(Math.random()-.5),vy:2.5+Math.random()*2,vz:-windNow*4.5+(Math.random()-.5),
+    life:1.6+Math.random()*1.6,s:3+Math.random()*4,r:.22,g:.2,b:.2,grow:2.4,mode:2});
+}
+function spawnExplosion(x,y,z){
+  for(let i=0;i<46;i++){
+    const a=Math.random()*Math.PI*2,sp=4+Math.random()*13,vy=3+Math.random()*9;
+    fireP.spawn({x,y:y+1,z,vx:Math.cos(a)*sp,vy,vz:Math.sin(a)*sp,life:.4+Math.random()*.6,s:2.6+Math.random()*3,mode:1,grav:-9});
+  }
+  for(let i=0;i<14;i++)smokeP.spawn({x,y:y+2,z,vx:(Math.random()-.5)*5,vy:3+Math.random()*4,vz:(Math.random()-.5)*5,life:1.8+Math.random()*1.4,s:4+Math.random()*4,r:.25,g:.22,b:.2,grow:2.5,mode:2});
+  shake=Math.min(shake+.55,1.4);
+  flashEl.style.transition='none';flashEl.style.opacity=.28;
+  requestAnimationFrame(()=>{flashEl.style.transition='opacity .5s';flashEl.style.opacity=0;});
+}
+function spawnArrow(x1,z1,x2,z2,fire){
+  const T=.9,dx=(x2-x1)/T,dz=(z2-z1)/T;
+  fireP.spawn({x:x1,y:2,z:z1,vx:dx+(Math.random()-.5)*4,vy:11+Math.random()*4,vz:dz+(Math.random()-.5)*4,
+    life:T,s:fire?1.7:1.1,mode:fire?1:0,r:.95,g:.92,b:.7,grav:-24});
+}
+/* 烏雲 */
+const clouds=[];
+{
+  const cv=document.createElement('canvas');cv.width=cv.height=128;
+  const ctx=cv.getContext('2d');
+  const grd=ctx.createRadialGradient(64,64,8,64,64,62);
+  grd.addColorStop(0,'rgba(30,32,40,.85)');grd.addColorStop(1,'rgba(30,32,40,0)');
+  ctx.fillStyle=grd;ctx.fillRect(0,0,128,128);
+  const tex=new THREE.CanvasTexture(cv);
+  for(let i=0;i<9;i++){
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:0,depthWrite:false}));
+    sp.position.set((Math.random()-.5)*260,62+Math.random()*16,(Math.random()-.5)*160);
+    sp.scale.set(70+Math.random()*50,38+Math.random()*22,1);
+    scene.add(sp);clouds.push(sp);
+  }
+}
+
+/* ============ UI ============ */
+const facEl=document.getElementById('factions');
+const FACINFO=[
+  {key:'cao',gen:'曹操｜張遼 ‧ 徐晃 ‧ 蔡瑁 ‧ 張允',max:22},
+  {key:'sun',gen:'孫權｜周瑜 ‧ 程普 ‧ 黃蓋 ‧ 魯肅',max:22},
+  {key:'liu',gen:'劉備｜諸葛亮 ‧ 關羽 ‧ 張飛 ‧ 趙雲',max:22},
+];
+const facBars={};
+for(const f of FACINFO){
+  const d=document.createElement('div');d.className='fac';d.style.setProperty('--c',FAC[f.key].css);
+  d.innerHTML=`<div class="fac-flag">${FAC[f.key].ch}</div><div style="flex:1"><div class="fac-name">${FAC[f.key].name}</div><div class="fac-gen">${f.gen}</div><div class="bar"><div class="fill"></div></div><div class="num"></div></div>`;
+  facEl.appendChild(d);
+  facBars[f.key]={fill:d.querySelector('.fill'),num:d.querySelector('.num'),max:f.max};
+}
+function setStr(key,wan){
+  const b=facBars[key];
+  b.fill.style.width=(clamp(wan/b.max,0,1)*100)+'%';
+  b.num.textContent='兵力 約 '+Math.round(wan*10)/10+' 萬';
+}
+const toastsEl=document.getElementById('toasts'),stratEl=document.getElementById('stratagem'),flashEl=document.getElementById('flash');
+function showToast(title,desc,fac){
+  const d=document.createElement('div');d.className='toast';
+  d.style.setProperty('--c',fac?FAC[fac].css:'#d9b96c');
+  d.innerHTML=`<div class="tk">戰報</div><div class="tt">${title}</div><div class="td">${desc}</div>`;
+  toastsEl.appendChild(d);
+  while(toastsEl.children.length>4)toastsEl.firstChild.remove();
+  setTimeout(()=>{d.classList.add('out');setTimeout(()=>d.remove(),900)},6500);
+}
+let stratTimer=null;
+function showStrat(name,by,desc){
+  stratEl.querySelector('.s-name').textContent=name;
+  stratEl.querySelector('.s-by').textContent='—— '+by+' ——';
+  stratEl.querySelector('.s-desc').textContent=desc;
+  stratEl.classList.remove('show');void stratEl.offsetWidth;stratEl.classList.add('show');
+  clearTimeout(stratTimer);stratTimer=setTimeout(()=>stratEl.classList.remove('show'),3000);
+  shake=Math.min(shake+.4,1.2);
+}
+
+/* ============ 戰役時間軸 ============ */
+let windNow=0,shake=0,volleys=null,burnGlow=0;
+const A_WULIN=[-14,zc(-14)-4],A_CHIBI=[34,zc(34)+5];
+const caoSailPath=[[-130,zc(-130)],[-90,zc(-90)-2],[-50,zc(-50)-3],A_WULIN];
+const caoLandPath=[[-135,zc(-135)-16],[-100,zc(-100)-18],[-60,zc(-60)-17],[-26,zc(-26)-19]];
+const caoRetreatPath=[[-26,zc(-26)-19],[-44,-32],[-62,-44],[-74,-50],[-95,-58],[-135,-62]];
+const wuSailPath=[[128,zc(128)],[100,zc(100)+2],[66,zc(66)+4],A_CHIBI];
+function fleetLayout(ships,offs,ax,az,head){
+  // 河道近似東西向，隊形不隨航向旋轉
+  ships.forEach((sh,i)=>{
+    sh.position.set(ax+offs[i][0],0,az+offs[i][1]);
+    sh.rotation.y=head;
+  });
+}
+function shipBob(T){
+  const all=[...caoShips,caoFlagship,...wuShips,wuFlagship,...fireShips];
+  all.forEach((sh,i)=>{
+    if(!sh.visible)return;
+    const u=sh.userData;
+    sh.position.y=Math.sin(T*1.3+i*1.7)*(.12+windNow*.22)-u.sink*2.8;
+    sh.rotation.z=Math.sin(T*1.1+i)*(0.02+windNow*.04)+u.sink*.5;
+    sh.rotation.x=u.sink*.3;
+    u.hullMat.color.copy(u.baseColor).lerp(_c2.setHex(0x16110c),u.burn*.9);
+    u.sailMat.opacity=1-u.burn*.85;
+    u.flag.material.opacity=1-u.burn*.7;
+  });
+}
+function resetFrame(){
+  windNow=0;volleys=null;burnGlow=0;
+  chains.visible=false;
+  clouds.forEach(c=>c.material.opacity=0);
+  camp.visible=false;campTents.forEach(t=>{t.burn=0;t.mat.color.setHex(0xd8cdb0);});
+  fireShips.forEach(s=>s.visible=false);
+  guanYu.visible=false;wuMarines.visible=false;liuArmy.visible=false;caoArmy.visible=true;
+  [...caoShips,caoFlagship,...wuShips,wuFlagship,...fireShips].forEach(s=>{s.userData.burn=0;s.userData.sink=0;});
+  [...wuShips,wuFlagship].forEach(s=>s.visible=false);
+}
+const PHASES=[
+{ id:0,short:'南下',act:'第一幕｜大軍南下',date:'建安十三年九月（208年）',dur:12,
+  narr:'曹操底定荊州，親率水陸大軍二十餘萬自江陵順長江東下，舳艫千里，劍指江東。',
+  str:{cao:[22,22],sun:[3,3],liu:[2,2]},
+  cam:{p0:[-210,95,110],p1:[-50,55,75],l0:[-110,0,-20],l1:[-30,0,-12]},
+  events:[
+    {t:.06,tt:'曹操親率大軍出江陵',td:'水陸並進，順江東下',f:'cao'},
+    {t:.5,tt:'收編荊州水軍',td:'以蔡瑁、張允統水軍為前部',f:'cao'},
+  ],
+  update(t){
+    const ft=smooth(t);
+    const p=pathPos(caoSailPath,ft);
+    fleetLayout(caoShips,caoLooseOff,p[0],p[1],0);
+    caoFlagship.position.set(p[0]-28,0,p[1]);caoFlagship.rotation.y=0;
+    const lp=pathPos(caoLandPath,ft);
+    armyAt(caoArmy,lp[0],lp[1],lp[2],1);
+  }},
+{ id:1,short:'結盟',act:'第二幕｜孫劉結盟',date:'建安十三年十月',dur:10,
+  narr:'劉備敗走屯駐樊口，諸葛亮出使柴桑說動孫權；周瑜率三萬精銳水軍溯江西上，孫劉聯軍成形。',
+  str:{cao:[22,22],sun:[3,3],liu:[2,2]},
+  cam:{p0:[185,85,115],p1:[62,48,58],l0:[110,0,8],l1:[58,0,10]},
+  events:[
+    {t:.12,tt:'魯肅過江',td:'勸劉備與孫權合力抗曹',f:'sun'},
+    {t:.42,tt:'諸葛亮出使柴桑',td:'「操軍遠來疲弊，必破之矣」',f:'liu'},
+    {t:.78,tt:'孫權決意抗曹',td:'拔刀斫案：「再言降者，與此案同！」',f:'sun'},
+  ],
+  update(t){
+    PHASES[0].update(1);
+    liuArmy.visible=t>.15;
+    armyAt(liuArmy,100,zc(100)+19,Math.PI*1.5,1);
+    const show=t>.3;
+    [...wuShips,wuFlagship].forEach(s=>s.visible=show);
+    if(show){
+      const ft=smooth((t-.3)/.7);
+      const p=pathPos(wuSailPath,ft);
+      fleetLayout(wuShips,wuOff,p[0],p[1],Math.PI,1);
+      wuFlagship.position.set(p[0]+24,0,p[1]);wuFlagship.rotation.y=Math.PI;
+    }
+  }},
+{ id:2,short:'初戰',act:'第三幕｜赤壁初戰',date:'建安十三年十一月',dur:10,
+  narr:'兩軍遭遇於赤壁。北軍不習水戰、疫病蔓延，初戰失利，曹操退駐北岸烏林，與聯軍隔江對峙。',
+  str:{cao:[22,20],sun:[3,3],liu:[2,2]},
+  cam:{p0:[45,48,92],p1:[2,30,52],l0:[8,0,8],l1:[2,0,4]},
+  events:[
+    {t:.28,tt:'兩軍遭遇赤壁',td:'曹軍初戰不利',f:'sun'},
+    {t:.58,tt:'曹軍疫病蔓延',td:'北軍不習水土，戰力大減',f:'cao'},
+    {t:.86,tt:'曹軍退駐烏林',td:'隔江與聯軍對峙',f:'cao'},
+  ],
+  update(t){
+    PHASES[1].update(1);
+    // 曹艦隊：前進(0-.4) → 後退(.6-1)
+    const adv=t<.45?smooth(t/.45):t<.6?1:1-smooth((t-.6)/.4);
+    const ax=lerp(A_WULIN[0],-2,adv*.7),az=lerp(A_WULIN[1],zc(-2)-1,adv);
+    fleetLayout(caoShips,caoLooseOff,ax,az,0,1);
+    caoFlagship.position.set(ax-28,0,az);
+    // 吳艦隊小幅前壓
+    const wadv=t<.45?smooth(t/.45):1-smooth((t-.5)/.5);
+    const wx=lerp(A_CHIBI[0],16,wadv),wz=lerp(A_CHIBI[1],zc(16)+3,wadv);
+    fleetLayout(wuShips,wuOff,wx,wz,Math.PI,1);
+    wuFlagship.position.set(wx+24,0,wz);
+    // 兩艘曹船戰沉
+    const sink=clamp((t-.4)/.3,0,1);
+    caoShips[6].userData.sink=sink;caoShips[14].userData.sink=sink;
+    if(t>.15&&t<.5)volleys={ax:wx-8,az:wz,bx:ax+18,bz:az,rate:26,fire:false,both:true};
+  }},
+{ id:3,short:'連環計',act:'第四幕｜連環計',date:'建安十三年十二月',dur:10,
+  narr:'為解北軍暈船之苦，曹操以鐵索連舟、鋪板其上，戰船首尾相接、穩如平地——卻也埋下火攻的死穴。',
+  str:{cao:[20,20],sun:[3,3],liu:[2,2]},
+  cam:{p0:[-44,36,38],p1:[-6,15,16],l0:[-14,0,-3],l1:[-14,0,-4]},
+  events:[
+    {t:.22,kind:'strat',name:'連環計',by:'龐統 獻計（演義）',desc:'鐵索連舟，人馬如履平地'},
+    {t:.66,tt:'鐵索連舟',td:'曹軍戰船首尾相接，穩如平地',f:'cao'},
+  ],
+  update(t){
+    PHASES[2].update(1);
+    camp.visible=true;
+    const mix=1-smooth((t-.2)/.6); // 1=散 0=連
+    caoShips.forEach((sh,i)=>{
+      const ox=lerp(caoChainOff[i][0],caoLooseOff[i][0],mix),oz=lerp(caoChainOff[i][1],caoLooseOff[i][1],mix);
+      sh.position.set(A_WULIN[0]+ox,0,A_WULIN[1]+oz);sh.rotation.y=0;
+    });
+    caoFlagship.position.set(A_WULIN[0]-28,0,A_WULIN[1]);
+    updateChains(clamp((t-.55)/.2,0,1));
+    fleetLayout(wuShips,wuOff,A_CHIBI[0],A_CHIBI[1],Math.PI,1);
+    wuFlagship.position.set(A_CHIBI[0]+24,0,A_CHIBI[1]);
+  }},
+{ id:4,short:'詐降',act:'第五幕｜苦肉計 ‧ 詐降',date:'建安十三年十二月',dur:10,
+  narr:'老將黃蓋自請苦肉，遣人密送詐降書曰：「交鋒之日，蓋為前部」。曹操深信不疑，約定受降之期。',
+  str:{cao:[20,20],sun:[3,3],liu:[2,2]},
+  cam:{p0:[34,26,42],p1:[-8,14,24],l0:[18,0,8],l1:[-12,0,0]},
+  events:[
+    {t:.18,kind:'strat',name:'苦肉計 ‧ 詐降',by:'黃蓋',desc:'「周瑜打黃蓋」——詐降書密送曹營'},
+    {t:.7,tt:'曹操中計',td:'不疑有詐，與黃蓋約期受降',f:'cao'},
+  ],
+  update(t){
+    PHASES[3].update(1);
+    updateChains(1);
+    // 黃蓋信使小船來回
+    const b=fireShips[0];b.visible=true;
+    const f=tri(smooth(t));
+    b.position.set(lerp(A_CHIBI[0]-10,A_WULIN[0]+30,f),0,lerp(A_CHIBI[1],A_WULIN[1]+4,f));
+    b.rotation.y=t<.5?Math.PI:0;
+  }},
+{ id:5,short:'東風',act:'第六幕｜萬事俱備 ‧ 東風驟起',date:'建安十三年十二月（冬至前後）',dur:10,
+  narr:'隆冬十二月，東南風驟起，風向逆轉——萬事俱備，只欠東風的時刻，到了。',
+  str:{cao:[20,20],sun:[3,3],liu:[2,2]},
+  cam:{p0:[66,42,82],p1:[22,26,48],l0:[20,0,2],l1:[2,0,-4]},
+  events:[
+    {t:.3,kind:'strat',name:'借東風',by:'諸葛亮（演義傳說）',desc:'七星壇上祭風，三日三夜東南大風'},
+    {t:.72,tt:'東南風大作',td:'江面浪湧，戰機已至',f:'sun'},
+  ],
+  update(t){
+    PHASES[4].update(1);
+    fireShips[0].visible=false;
+    windNow=smooth((t-.25)/.5)*1;
+    clouds.forEach((c,i)=>{c.material.opacity=windNow*.75;});
+  }},
+{ id:6,short:'火攻',act:'第七幕｜火燒赤壁',date:'建安十三年十二月 ‧ 夜',dur:16,
+  narr:'黃蓋以蒙衝鬥艦十艘滿載薪草膏油，乘風舉火直衝曹軍水寨。火烈風猛、煙炎張天，連環船頓成火海，延燒岸上營寨。',
+  str:{cao:[20,8],sun:[3,2.9],liu:[2,2]},
+  cam:{p0:[48,17,40],p1:[-36,42,28],l0:[26,2,10],l1:[-14,0,-6]},
+  events:[
+    {t:.04,kind:'strat',name:'火攻',by:'周瑜 ‧ 黃蓋',desc:'蒙衝鬥艦十艘，實以薪草、灌以膏油'},
+    {t:.3,tt:'黃蓋舉火',td:'火船乘東南風直撲曹軍水寨',f:'sun'},
+    {t:.52,tt:'火燒連環船',td:'煙炎張天，鐵索相連無從走脫',f:'sun'},
+    {t:.68,tt:'火油爆裂 ‧ 延燒岸營',td:'烏林大營陷入火海',f:'sun'},
+    {t:.85,tt:'曹軍大潰',td:'人馬燒溺死者甚眾',f:'cao'},
+  ],
+  update(t,live){
+    PHASES[5].update(1);
+    windNow=1;clouds.forEach(c=>c.material.opacity=.75);
+    // 火船突擊
+    const hit=.42;
+    fireShips.forEach((sh,i)=>{
+      sh.visible=true;
+      const sx=36+(i%2)*5,szv=zc(36)-2+(i>>1)*2.6;
+      const txp=A_WULIN[0]+26,tzp=A_WULIN[1]+(i-4.5)*3.0;
+      const f=smooth(clamp(t/hit,0,1));
+      sh.position.set(lerp(sx,txp,f),0,lerp(szv,tzp,f));
+      sh.rotation.y=Math.PI;
+      sh.userData.burn=clamp((t-.22)/.15,0,1);
+    });
+    // 連環船延燒：依距離前緣由東向西蔓延
+    caoShips.forEach((sh,i)=>{
+      const col=i%8; // 0西 7東
+      const delay=(7-col)*.05+(hash2(i,5))*.04;
+      sh.userData.burn=clamp((t-hit-delay)/.14,0,1);
+    });
+    caoFlagship.userData.burn=clamp((t-hit-.34)/.2,0,1);
+    updateChains(1);
+    // 岸上營寨起火
+    campTents.forEach((tt,i)=>{tt.burn=clamp((t-.62-(i%5)*.04)/.18,0,1);
+      tt.mat.color.setHex(0xd8cdb0).lerp(_c2.setHex(0x16110c),tt.burn*.9);});
+    // 吳艦隊跟進
+    const f2=smooth(clamp((t-.3)/.5,0,1));
+    const wx=lerp(A_CHIBI[0],8,f2),wz=lerp(A_CHIBI[1],zc(8)+1,f2);
+    fleetLayout(wuShips,wuOff,wx,wz,Math.PI,1);
+    wuFlagship.position.set(wx+24,0,wz);
+    if(t>.45&&t<.95)volleys={ax:wx-10,az:wz,bx:A_WULIN[0]+8,bz:A_WULIN[1],rate:20,fire:true,both:false};
+    // 曹陸軍潰散
+    armyAt(caoArmy,-26,zc(-26)-19,Math.PI,lerp(1,.4,clamp((t-.6)/.4,0,1)));
+    burnGlow=caoShips.reduce((s,sh)=>s+sh.userData.burn,0)/40+campTents.reduce((s,tt)=>s+tt.burn,0)/15;
+  }},
+{ id:7,short:'敗走',act:'第八幕｜敗走華容道',date:'建安十三年十二月末',dur:12,
+  narr:'曹操引殘部自華容道倉皇北遁，道路泥濘、羸兵負草填路。聯軍水陸並進追擊，曹操僅以身免，退回江陵、引軍北歸。',
+  str:{cao:[8,6],sun:[2.9,2.9],liu:[2,2]},
+  cam:{p0:[-28,46,28],p1:[-115,75,-8],l0:[-40,0,-26],l1:[-78,0,-50]},
+  events:[
+    {t:.12,tt:'曹操敗走華容道',td:'道路泥濘，羸兵負草填路，死者甚眾',f:'cao'},
+    {t:.52,tt:'關羽攔截',td:'曹操哀告舊恩，關羽義釋曹操（演義橋段）',f:'liu'},
+    {t:.85,tt:'曹操北歸',td:'留曹仁守江陵，自還北方',f:'cao'},
+  ],
+  update(t,live){
+    PHASES[6].update(1,false);
+    windNow=.4;clouds.forEach(c=>c.material.opacity=.45);
+    // 曹軍殘部撤退（關羽攔截時暫停）
+    let m;
+    if(t<.45)m=smooth(t/.45)*.55;
+    else if(t<.62)m=.55;
+    else m=.55+smooth((t-.62)/.38)*.45;
+    const p=pathPos(caoRetreatPath,m);
+    armyAt(caoArmy,p[0],p[1],p[2],lerp(.4,.22,t));
+    guanYu.visible=t>.25;
+    armyAt(guanYu,-80,-44,Math.PI/2,1);
+    // 聯軍追擊
+    wuMarines.visible=t>.15;
+    const wp=pathPos([[-18,zc(-18)-16],[-34,-26],[-50,-38]],smooth(clamp((t-.15)/.8,0,1)));
+    armyAt(wuMarines,wp[0],wp[1],wp[2],1);
+    const lp=pathPos([[100,zc(100)+19],[60,zc(60)+16],[24,zc(24)+14]],smooth(clamp((t-.1)/.9,0,1)));
+    armyAt(liuArmy,lp[0],lp[1],lp[2],1);
+    liuArmy.visible=true;
+    burnGlow=.35*(1-t*.7);
+  }},
+];
+const TOTAL=PHASES.reduce((s,p)=>s+p.dur,0);
+/* 事件絕對時間表 */
+const EVENTS=[];
+{
+  let acc=0;
+  for(const ph of PHASES){
+    for(const e of ph.events)EVENTS.push({T:acc+e.t*ph.dur,...e});
+    acc+=ph.dur;
+  }
+  EVENTS.sort((a,b)=>a.T-b.T);
+}
+function locate(T){
+  let acc=0;
+  for(let i=0;i<PHASES.length;i++){
+    if(T<acc+PHASES[i].dur||i===PHASES.length-1)return{idx:i,t:clamp((T-acc)/PHASES[i].dur,0,1)};
+    acc+=PHASES[i].dur;
+  }
+  return{idx:0,t:0};
+}
+
+/* ============ 播放控制 ============ */
+let T=0,prevT=-1,playing=true,speed=1,autoCam=true,ended=false;
+const speeds=[0.5,1,2,4];let spIdx=1;
+const btnPlay=document.getElementById('btnPlay'),btnSpeed=document.getElementById('btnSpeed'),
+      btnCam=document.getElementById('btnCam'),btnRestart=document.getElementById('btnRestart'),
+      scrub=document.getElementById('scrub'),clockEl=document.getElementById('clock'),
+      actEl=document.getElementById('actLabel'),narrEl=document.getElementById('narration'),
+      dateEl=document.getElementById('dateLabel'),endEl=document.getElementById('endcard'),
+      phasesEl=document.getElementById('phases');
+PHASES.forEach((p,i)=>{
+  const b=document.createElement('button');b.className='ph';b.textContent=p.short;
+  b.onclick=()=>{jumpTo(PHASES.slice(0,i).reduce((s,q)=>s+q.dur,0)+.01);};
+  phasesEl.appendChild(b);
+});
+const phBtns=[...phasesEl.children];
+function jumpTo(t){
+  T=clamp(t,0,TOTAL-.01);prevT=T;ended=false;endEl.classList.remove('show');
+  toastsEl.innerHTML='';stratEl.classList.remove('show');
+  if(!playing)togglePlay();
+}
+function togglePlay(){playing=!playing;btnPlay.textContent=playing?'⏸ 暫停':'▶ 播放';}
+btnPlay.onclick=togglePlay;
+btnSpeed.onclick=()=>{spIdx=(spIdx+1)%speeds.length;speed=speeds[spIdx];btnSpeed.textContent='速度 '+speed+'×';};
+btnCam.onclick=()=>{autoCam=!autoCam;syncCamBtn();};
+function syncCamBtn(){
+  btnCam.textContent=autoCam?'🎥 電影運鏡':'🕹 自由視角';
+  btnCam.classList.toggle('on',autoCam);
+  controls.enabled=!autoCam;
+}
+btnRestart.onclick=()=>jumpTo(0);
+document.getElementById('btnReplay').onclick=()=>jumpTo(0);
+scrub.addEventListener('input',()=>{jumpTo(scrub.value/1000*TOTAL);});
+renderer.domElement.addEventListener('pointerdown',()=>{if(autoCam){autoCam=false;syncCamBtn();}});
+addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();togglePlay();}});
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+/* ============ 主迴圈 ============ */
+const camTarget=new THREE.Vector3();
+let volleyAcc=0,explAcc=0,lastUI=-1;
+const clockT=new THREE.Clock();
+function frame(){
+  requestAnimationFrame(frame);
+  const dt=Math.min(clockT.getDelta(),.08);
+  const simDt=playing&&!ended?dt*speed:0;
+  T+=simDt;
+  if(T>=TOTAL&&!ended){ended=true;playing=false;btnPlay.textContent='▶ 播放';endEl.classList.add('show');T=TOTAL-.001;}
+  const {idx,t}=locate(T);
+
+  /* 套用世界狀態（決定論式） */
+  resetFrame();
+  for(let i=0;i<idx;i++)PHASES[i].update(1,false);
+  PHASES[idx].update(t,true);
+  applyAmb(idx,t);
+
+  /* 事件觸發 */
+  if(T>prevT){
+    for(const e of EVENTS)if(e.T>prevT&&e.T<=T){
+      if(e.kind==='strat')showStrat(e.name,e.by,e.desc);
+      else showToast(e.tt,e.td,e.f);
+    }
+  }
+  prevT=T;
+
+  /* 持續特效 */
+  const elapsed=clockT.elapsedTime;
+  if(simDt>0){
+    // 燃燒中的船
+    for(const sh of [...caoShips,caoFlagship,...fireShips]){
+      const b=sh.userData.burn;
+      if(b>0.02&&sh.visible){
+        const rate=b*(sh===caoFlagship?22:9)*simDt;
+        let n=Math.floor(rate)+(Math.random()<rate%1?1:0);
+        while(n-->0)spawnFireAt(sh.position.x,1.5,sh.position.z,.9+b*.6);
+      }
+    }
+    for(const tt of campTents){
+      if(tt.burn>0.02){
+        const wp=tt.mesh.getWorldPosition(_v1);
+        const rate=tt.burn*5*simDt;
+        let n=Math.floor(rate)+(Math.random()<rate%1?1:0);
+        while(n-->0)spawnFireAt(wp.x,wp.y+1,wp.z,.9);
+      }
+    }
+    // 箭雨
+    if(volleys){
+      volleyAcc+=volleys.rate*simDt;
+      while(volleyAcc>1){
+        volleyAcc--;
+        spawnArrow(volleys.ax+(Math.random()-.5)*22,volleys.az+(Math.random()-.5)*10,
+                   volleys.bx+(Math.random()-.5)*26,volleys.bz+(Math.random()-.5)*12,volleys.fire);
+        if(volleys.both)spawnArrow(volleys.bx+(Math.random()-.5)*26,volleys.bz+(Math.random()-.5)*12,
+                   volleys.ax+(Math.random()-.5)*22,volleys.az+(Math.random()-.5)*10,false);
+      }
+    }
+    // 火油爆裂
+    if(idx===6&&t>.42&&t<.95){
+      explAcc-=simDt;
+      if(explAcc<=0){
+        explAcc=.5+Math.random()*.9;
+        const burning=caoShips.filter(s=>s.userData.burn>.3);
+        if(burning.length){const s=burning[Math.floor(Math.random()*burning.length)];spawnExplosion(s.position.x,1,s.position.z);}
+      }
+    }
+    // 東南風粒子
+    if(windNow>0.05){
+      const wn=windNow*40*simDt;
+      let n=Math.floor(wn)+(Math.random()<wn%1?1:0);
+      while(n-->0)windP.spawn({
+        x:(Math.random()-.5)*260+40,y:2+Math.random()*26,z:(Math.random()-.5)*150+20,
+        vx:-34-Math.random()*12,vy:0,vz:-20-Math.random()*8,
+        life:1.6+Math.random()*1.2,s:1.6,r:.85,g:.9,b:1,mode:3});
+    }
+  }
+  fireP.update(dt);smokeP.update(dt);windP.update(dt);
+  shipBob(elapsed);
+  // 旗幟飄動
+  // 火光
+  fireLight.intensity=burnGlow>0?burnGlow*30*(0.85+Math.sin(elapsed*17)*.15+Math.random()*.1):0;
+  fireLight.position.set(A_WULIN[0],6,A_WULIN[1]);
+  shake*=Math.exp(-3.2*dt);
+  // 水面波動
+  {
+    const arr=waterPos.array,A=.14+windNow*.22;
+    for(let i=0;i<waterPos.count;i++){
+      const x=waterBase[i*3],z=waterBase[i*3+2];
+      arr[i*3+1]=Math.sin(x*.22+elapsed*1.5)*A+Math.cos(z*.3+elapsed*1.1)*A*.7;
+    }
+    waterPos.needsUpdate=true;
+  }
+  // 烏雲飄移
+  for(const c of clouds){c.position.x-=windNow*6*dt;if(c.position.x<-160)c.position.x=160;}
+
+  /* 攝影機 */
+  const ph=PHASES[idx];
+  if(autoCam){
+    const e=smooth(t);
+    camera.position.set(
+      lerp(ph.cam.p0[0],ph.cam.p1[0],e)+Math.sin(elapsed*.5)*1.4+(Math.random()-.5)*shake*2,
+      lerp(ph.cam.p0[1],ph.cam.p1[1],e)+Math.sin(elapsed*.37)*.8+(Math.random()-.5)*shake*1.4,
+      lerp(ph.cam.p0[2],ph.cam.p1[2],e)+Math.cos(elapsed*.43)*1.4+(Math.random()-.5)*shake*2);
+    camTarget.set(lerp(ph.cam.l0[0],ph.cam.l1[0],e),lerp(ph.cam.l0[1],ph.cam.l1[1],e),lerp(ph.cam.l0[2],ph.cam.l1[2],e));
+    controls.target.copy(camTarget);
+    camera.lookAt(camTarget);
+  }else{
+    if(shake>0.01){camera.position.x+=(Math.random()-.5)*shake;camera.position.y+=(Math.random()-.5)*shake*.6;}
+    controls.update();
+  }
+
+  /* UI 更新（每 0.1s） */
+  if(Math.abs(T-lastUI)>.1||lastUI<0){
+    lastUI=T;
+    actEl.textContent=ph.act;
+    narrEl.textContent=ph.narr;
+    dateEl.textContent=ph.date;
+    setStr('cao',lerp(ph.str.cao[0],ph.str.cao[1],t));
+    setStr('sun',lerp(ph.str.sun[0],ph.str.sun[1],t));
+    setStr('liu',lerp(ph.str.liu[0],ph.str.liu[1],t));
+    scrub.value=T/TOTAL*1000;
+    const mm=Math.floor(T/60),ss=Math.floor(T%60);
+    clockEl.textContent=mm+':'+String(ss).padStart(2,'0');
+    phBtns.forEach((b,i)=>b.classList.toggle('on',i===idx));
+  }
+  renderer.render(scene,camera);
+}
+
+/* 字型就緒後再開始（標籤需用到） */
+document.getElementById('loadmsg').textContent='準備戰場中…';
+const startApp=()=>{
+  document.getElementById('loading').classList.add('hide');
+  frame();
+};
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(startApp);
+else startApp();
+</script>
+</body>
+</html>

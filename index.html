@@ -284,8 +284,8 @@ function makePaperTex(){
 }
 const paperTex=makePaperTex();
 const GradeShader={
-  uniforms:{tDiffuse:{value:null},uVig:{value:0.52},uWarm:{value:0.12},uSat:{value:1.0},uContrast:{value:1.06},
-    uPaper:{value:paperTex},uPaperAmt:{value:0.26},uPaperScale:{value:new THREE.Vector2(4.0,2.4)}},
+  uniforms:{tDiffuse:{value:null},uVig:{value:0.42},uWarm:{value:0.12},uSat:{value:1.12},uContrast:{value:1.07},
+    uPaper:{value:paperTex},uPaperAmt:{value:0.10},uPaperScale:{value:new THREE.Vector2(4.0,2.4)}},
   vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
   fragmentShader:`uniform sampler2D tDiffuse,uPaper;uniform float uVig,uWarm,uSat,uContrast,uPaperAmt;uniform vec2 uPaperScale;varying vec2 vUv;
     void main(){
@@ -369,13 +369,15 @@ function applyAmb(idx,t){
   g.computeVertexNormals();
   scene.add(new THREE.Mesh(g,new THREE.MeshLambertMaterial({vertexColors:true})));
 }
-/* 水面 */
-let water,waterPos,waterBase;
+/* 水面（寫實江水：多重波浪、逐幀重算法線產生流動高光與反光） */
+let water,waterPos,waterBase,waterGeo;
 {
-  const g=new THREE.PlaneGeometry(360,250,90,60);g.rotateX(-Math.PI/2);
-  water=new THREE.Mesh(g,new THREE.MeshPhongMaterial({color:0x8fa1a4,transparent:true,opacity:.82,shininess:90,specular:0xeef0ea}));
+  waterGeo=new THREE.PlaneGeometry(360,250,140,96);waterGeo.rotateX(-Math.PI/2);
+  water=new THREE.Mesh(waterGeo,new THREE.MeshPhongMaterial({
+    color:0x2c5663,transparent:true,opacity:.9,shininess:160,specular:0xcfeaf0,
+    emissive:0x0e2128,emissiveIntensity:.35}));
   water.position.y=0;scene.add(water);
-  waterPos=g.attributes.position;waterBase=waterPos.array.slice();
+  waterPos=waterGeo.attributes.position;waterBase=waterPos.array.slice();
 }
 /* 遠山天幕（Canva 水墨遠山，亮處已轉透明，環繞全場、隨霧淡入） */
 {
@@ -447,47 +449,94 @@ for(const [name,x,z] of PLACES){
   const ar=new THREE.Mesh(new THREE.ConeGeometry(1.6,5,6),new THREE.MeshBasicMaterial({color:0xcfe0f0}));
   ar.position.set(150,5,-104);ar.rotation.x=-Math.PI/2;scene.add(ar);
 }
-/* 樹木點綴 */
+/* 森林（闊葉＋松樹兩型，多層樹冠、逐株色彩變化） */
 {
-  const trunkG=new THREE.CylinderGeometry(.25,.35,2,5),crownG=new THREE.ConeGeometry(1.5,3.4,6);
-  const trunkM=new THREE.MeshLambertMaterial({color:0x3a322a}),crownM=new THREE.MeshLambertMaterial({color:0x515a47});
-  const n=160,trunks=new THREE.InstancedMesh(trunkG,trunkM,n),crowns=new THREE.InstancedMesh(crownG,crownM,n);
-  const m=new THREE.Matrix4();let cnt=0;
-  for(let i=0;i<400&&cnt<n;i++){
-    const x=(hash2(i,3)-.5)*340,z=(hash2(i,7)-.5)*230,h=groundH(x,z);
-    if(h<1.2||h>9||cliffW(x,z)>.2)continue;
-    const s=.8+hash2(i,11)*.8;
-    m.makeScale(s,s,s);m.setPosition(x,h+1,z);trunks.setMatrixAt(cnt,m);
-    m.makeScale(s,s,s);m.setPosition(x,h+2.2*s+1.2,z);crowns.setMatrixAt(cnt,m);
-    cnt++;
+  const trees=[];
+  for(let i=0;i<560&&trees.length<240;i++){
+    const x=(hash2(i,3)-.5)*344,z=(hash2(i,7)-.5)*234,h=groundH(x,z);
+    if(h<1.2||h>10.5||cliffW(x,z)>.2||swampW(x,z)>.55)continue;
+    trees.push({x,z,h,s:.7+hash2(i,11)*1.1,pine:hash2(i,21)>0.6,seed:i});
   }
-  trunks.count=crowns.count=cnt;scene.add(trunks,crowns);
-}
-
-/* ============ 船艦 ============ */
-const hullMatBase=new THREE.MeshLambertMaterial({color:0x352f28});
-function makeShip(fac,{large=false,fire=false}={}){
-  const g=new THREE.Group();const s=large?1.5:1;
-  const hullMat=hullMatBase.clone();
-  const hull=new THREE.Mesh(new THREE.BoxGeometry(6*s,1.3*s,2.2*s),hullMat);hull.position.y=.5*s;g.add(hull);
-  const bow=new THREE.Mesh(new THREE.ConeGeometry(1.1*s,2.4*s,4),hullMat);
-  bow.rotation.z=-Math.PI/2;bow.rotation.y=Math.PI/4;bow.position.set(4.1*s,.5*s,0);g.add(bow);
-  const deck=new THREE.Mesh(new THREE.BoxGeometry(2.6*s,1.4*s,1.8*s),new THREE.MeshLambertMaterial({color:0x4a4138}));
-  deck.position.set(-1*s,1.8*s,0);g.add(deck);
-  const mast=new THREE.Mesh(new THREE.CylinderGeometry(.12*s,.16*s,6.5*s,5),new THREE.MeshLambertMaterial({color:0x4a3a28}));
-  mast.position.set(.8*s,4*s,0);g.add(mast);
-  const sailMat=new THREE.MeshLambertMaterial({color:fire?0xcdbd95:0xe6e0cd,side:THREE.DoubleSide,transparent:true});
-  const sail=new THREE.Mesh(new THREE.PlaneGeometry(3.4*s,3.8*s),sailMat);
-  sail.position.set(.8*s,4.2*s,0);g.add(sail);
-  const flag=new THREE.Mesh(new THREE.PlaneGeometry(1.7*s,1.2*s),new THREE.MeshBasicMaterial({map:flagTex[fac],side:THREE.DoubleSide,transparent:true}));
-  flag.position.set(1.6*s,7.3*s,0);g.add(flag);
-  if(fire){ // 柴草膏油
-    for(let k=0;k<3;k++){
-      const hay=new THREE.Mesh(new THREE.BoxGeometry(1.4,.9,1.6),new THREE.MeshLambertMaterial({color:0xc8a84e}));
-      hay.position.set(-2.4+k*1.6,1.5,0);g.add(hay);
+  const broad=trees.filter(t=>!t.pine),pine=trees.filter(t=>t.pine);
+  const trunkG=new THREE.CylinderGeometry(.12,.34,3,6);trunkG.translate(0,1.5,0);
+  const trunkInst=new THREE.InstancedMesh(trunkG,new THREE.MeshLambertMaterial({color:0x4f3a28}),trees.length);
+  const leafInst=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,1),new THREE.MeshLambertMaterial({color:0xffffff}),broad.length*3);
+  const pineInst=new THREE.InstancedMesh(new THREE.ConeGeometry(1,1.7,8),new THREE.MeshLambertMaterial({color:0xffffff}),pine.length*3);
+  const m=new THREE.Matrix4(),q=new THREE.Quaternion(),eu=new THREE.Euler(),pv=new THREE.Vector3(),sv=new THREE.Vector3(),col=new THREE.Color();
+  let ti=0,li=0,pi=0;
+  for(const t of trees){
+    const lean=(hash2(t.seed,5)-.5)*0.16,rot=hash2(t.seed,8)*6.28;
+    eu.set(lean,rot,lean*0.5);q.setFromEuler(eu);
+    m.compose(pv.set(t.x,t.h,t.z),q,sv.set(t.s,t.s,t.s));trunkInst.setMatrixAt(ti++,m);
+    col.setHSL(0.24+(hash2(t.seed,17)-.5)*0.07,0.36+hash2(t.seed,4)*0.2,0.28+hash2(t.seed,13)*0.16);
+    if(t.pine){
+      for(let k=0;k<3;k++){const r=t.s*(1.7-k*0.45);
+        m.compose(pv.set(t.x,t.h+t.s*(2.1+k*1.45),t.z),q,sv.set(r,t.s*1.7,r));
+        pineInst.setMatrixAt(pi,m);pineInst.setColorAt(pi,col);pi++;}
+    }else{
+      const blob=[[0,2.7,1.65],[1.0,2.2,1.1],[-0.85,2.35,1.05]];
+      for(const [ox,oy,rr] of blob){const r=rr*t.s;
+        m.compose(pv.set(t.x+ox*t.s,t.h+oy*t.s+0.5,t.z+(hash2(t.seed,oy)-.5)*t.s),q,sv.set(r,r*1.05,r));
+        leafInst.setMatrixAt(li,m);leafInst.setColorAt(li,col);li++;}
     }
   }
-  g.userData={fac,hullMat,sailMat,flag,burn:0,sink:0,baseColor:new THREE.Color(0x352f28)};
+  trunkInst.count=ti;leafInst.count=li;pineInst.count=pi;
+  scene.add(trunkInst,leafInst,pineInst);
+}
+
+/* ============ 船艦（中式戰船：弧形船身、高聳船樓、舷牆、雙桅硬篷帆） ============ */
+const SHIP_WOOD=0x6b4a2f;
+const hullMatBase=new THREE.MeshLambertMaterial({color:SHIP_WOOD});
+// 硬篷帆紋理：篷布底＋橫向竹篾（batten）與帆骨
+function makeSailTex(fire){
+  const W=128,H=160,cv=document.createElement('canvas');cv.width=W;cv.height=H;const x=cv.getContext('2d');
+  const base=fire?'#cbb98e':'#e7e1cd';x.fillStyle=base;x.fillRect(0,0,W,H);
+  const g=x.createLinearGradient(0,0,W,0);g.addColorStop(0,'rgba(0,0,0,.12)');g.addColorStop(.5,'rgba(255,255,255,.06)');g.addColorStop(1,'rgba(0,0,0,.12)');
+  x.fillStyle=g;x.fillRect(0,0,W,H);
+  x.strokeStyle='rgba(80,62,40,.55)';x.lineWidth=3;
+  for(let i=1;i<9;i++){const y=H*i/9;x.beginPath();x.moveTo(2,y);x.lineTo(W-2,y);x.stroke();}
+  x.strokeStyle='rgba(80,62,40,.3)';x.lineWidth=1.5;
+  for(const px of [W*0.5]){x.beginPath();x.moveTo(px,0);x.lineTo(px,H);x.stroke();}
+  const t=new THREE.CanvasTexture(cv);return t;
+}
+const sailTexN=makeSailTex(false),sailTexF=makeSailTex(true);
+function makeShip(fac,{large=false,fire=false}={}){
+  const g=new THREE.Group();const s=large?1.5:1;
+  const hullMat=hullMatBase.clone();                                   // 受燒時染色用
+  const deckMat=new THREE.MeshLambertMaterial({color:0x9c7a4a});
+  const trimMat=new THREE.MeshLambertMaterial({color:0x82603a});
+  const darkMat=new THREE.MeshLambertMaterial({color:0x4a3526});
+  // 船身主體
+  const hull=new THREE.Mesh(new THREE.BoxGeometry(6.2*s,1.5*s,2.4*s),hullMat);hull.position.y=.78*s;g.add(hull);
+  const bilge=new THREE.Mesh(new THREE.BoxGeometry(5.2*s,.7*s,1.5*s),hullMat);bilge.position.y=.12*s;g.add(bilge);
+  // 尖翹船首
+  const bow=new THREE.Mesh(new THREE.ConeGeometry(1.25*s,3*s,4),hullMat);
+  bow.rotation.z=-Math.PI/2;bow.rotation.y=Math.PI/4;bow.position.set(3.7*s,1.0*s,0);g.add(bow);
+  // 甲板與舷牆
+  const deck=new THREE.Mesh(new THREE.BoxGeometry(5.6*s,.22*s,2.0*s),deckMat);deck.position.set(0,1.55*s,0);g.add(deck);
+  for(const zz of [-1.18*s,1.18*s]){const rail=new THREE.Mesh(new THREE.BoxGeometry(5.8*s,.5*s,.16*s),trimMat);rail.position.set(0,1.7*s,zz);g.add(rail);}
+  // 高聳船樓（艉樓）＋頂蓋
+  const castle=new THREE.Mesh(new THREE.BoxGeometry(1.7*s,1.9*s,2.5*s),trimMat);castle.position.set(-2.5*s,2.05*s,0);g.add(castle);
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(2.1*s,.28*s,2.9*s),darkMat);roof.position.set(-2.5*s,3.1*s,0);g.add(roof);
+  // 雙桅＋硬篷帆
+  const sailMat=new THREE.MeshLambertMaterial({map:fire?sailTexF:sailTexN,color:fire?0xd8c79a:0xffffff,side:THREE.DoubleSide,transparent:true});
+  const mastMat=new THREE.MeshLambertMaterial({color:0x4a3a28});
+  function rig(mx,mh,sw,sh){
+    const mast=new THREE.Mesh(new THREE.CylinderGeometry(.1*s,.15*s,mh,6),mastMat);mast.position.set(mx,mh*0.5,0);g.add(mast);
+    const sail=new THREE.Mesh(new THREE.PlaneGeometry(sw*s,sh*s),sailMat);sail.position.set(mx-0.05*s,mh*0.62,0);sail.rotation.y=Math.PI/2;g.add(sail);
+    // 帆桁
+    const yard=new THREE.Mesh(new THREE.CylinderGeometry(.05*s,.05*s,sh*s*1.05,5),mastMat);yard.rotation.x=Math.PI/2;yard.position.set(mx,mh*0.62+sh*s*0.5,0);g.add(yard);
+  }
+  rig(1.3*s,6.6*s,1.0,3.4);
+  rig(-0.5*s,7.8*s,1.15,4.2);
+  // 軍旗（保留各軍辨識色）
+  const flag=new THREE.Mesh(new THREE.PlaneGeometry(1.7*s,1.2*s),new THREE.MeshBasicMaterial({map:flagTex[fac],side:THREE.DoubleSide,transparent:true}));
+  flag.position.set(-0.5*s+0.95*s,7.7*s,0);g.add(flag);
+  if(fire){ // 柴草膏油
+    const hayMat=new THREE.MeshLambertMaterial({color:0xc8a84e});
+    for(let k=0;k<4;k++){const hay=new THREE.Mesh(new THREE.BoxGeometry(1.3,.9,1.7),hayMat);hay.position.set(-2.2+k*1.4,1.95,0);g.add(hay);}
+  }
+  g.userData={fac,hullMat,sailMat,flag,burn:0,sink:0,baseColor:new THREE.Color(SHIP_WOOD)};
   scene.add(g);
   return g;
 }
@@ -635,9 +684,10 @@ function makeParticles(max,blending){
         const f=p.life/p.max;
         pos[n*3]=p.x;pos[n*3+1]=p.y;pos[n*3+2]=p.z;
         let r=p.r,gg=p.g,b=p.b,a=f*.9;
-        if(p.mode===1){r=1;gg=lerp(.15,.8,f);b=lerp(.02,.25,f);a=f*.95;} // 火：黃→紅
-        else if(p.mode===2)a=f*.3; // 煙
-        else if(p.mode===3)a=Math.min(1,f*2)*.5; // 風
+        if(p.mode===1){r=1;gg=lerp(.12,.95,f);b=lerp(0,.55,f*f);a=f*.95;}            // 火焰：白熱→橙→暗紅
+        else if(p.mode===2)a=f*.32;                                                  // 煙
+        else if(p.mode===3)a=Math.min(1,f*2)*.5;                                     // 風
+        else if(p.mode===4){r=1;gg=.55+.3*Math.sin(p.life*45);b=.12;a=Math.min(1,f*1.6);} // 餘燼火花
         col[n*4]=r;col[n*4+1]=gg;col[n*4+2]=b;col[n*4+3]=a;
         siz[n]=p.s*(1+p.grow*(1-f));
         n++;
@@ -651,18 +701,32 @@ const fireP=makeParticles(2600,THREE.AdditiveBlending);
 const smokeP=makeParticles(1400,THREE.NormalBlending);
 const windP=makeParticles(700,THREE.NormalBlending);
 function spawnFireAt(x,y,z,inten){
-  fireP.spawn({x:x+(Math.random()-.5)*3,y:y+Math.random()*1.5,z:z+(Math.random()-.5)*2,
-    vx:(Math.random()-.5)*1.5-windNow*4,vy:3+Math.random()*4,vz:(Math.random()-.5)*1.5-windNow*2.5,
-    life:.5+Math.random()*.7,s:(2.4+Math.random()*2.4)*inten,mode:1});
-  if(Math.random()<.5)smokeP.spawn({x,y:y+2.5,z,vx:-windNow*7+(Math.random()-.5),vy:2.5+Math.random()*2,vz:-windNow*4.5+(Math.random()-.5),
-    life:1.6+Math.random()*1.6,s:3+Math.random()*4,r:.22,g:.2,b:.2,grow:2.4,mode:2});
+  const tx=-windNow*4.5,tz=-windNow*3;
+  // 外焰（大、橙紅）
+  fireP.spawn({x:x+(Math.random()-.5)*3,y:y+Math.random()*1.5,z:z+(Math.random()-.5)*2.4,
+    vx:(Math.random()-.5)*2+tx,vy:3+Math.random()*4,vz:(Math.random()-.5)*2+tz,
+    life:.5+Math.random()*.7,s:(2.6+Math.random()*2.6)*inten,mode:1});
+  // 內焰核心（小、白熱、短命）
+  if(Math.random()<.7)fireP.spawn({x:x+(Math.random()-.5)*1.4,y:y+Math.random(),z:z+(Math.random()-.5)*1.2,
+    vx:(Math.random()-.5)+tx*.6,vy:4+Math.random()*4,vz:(Math.random()-.5)+tz*.6,
+    life:.28+Math.random()*.34,s:(1.5+Math.random()*1.3)*inten,mode:1});
+  // 餘燼火花
+  if(Math.random()<.35)fireP.spawn({x,y:y+1,z,vx:(Math.random()-.5)*4+tx,vy:5+Math.random()*7,vz:(Math.random()-.5)*4+tz,
+    life:.8+Math.random()*1,s:.7+Math.random()*.8,mode:4,grav:-7});
+  // 黑煙
+  if(Math.random()<.55)smokeP.spawn({x,y:y+2.6,z,vx:tx*1.7+(Math.random()-.5),vy:2.6+Math.random()*2.2,vz:tz*1.7+(Math.random()-.5),
+    life:1.8+Math.random()*1.8,s:3.4+Math.random()*4.5,r:.2,g:.19,b:.18,grow:2.6,mode:2});
 }
 function spawnExplosion(x,y,z){
-  for(let i=0;i<46;i++){
-    const a=Math.random()*Math.PI*2,sp=4+Math.random()*13,vy=3+Math.random()*9;
+  for(let i=0;i<40;i++){
+    const a=Math.random()*Math.PI*2,sp=4+Math.random()*14,vy=3+Math.random()*9;
     fireP.spawn({x,y:y+1,z,vx:Math.cos(a)*sp,vy,vz:Math.sin(a)*sp,life:.4+Math.random()*.6,s:2.6+Math.random()*3,mode:1,grav:-9});
   }
-  for(let i=0;i<14;i++)smokeP.spawn({x,y:y+2,z,vx:(Math.random()-.5)*5,vy:3+Math.random()*4,vz:(Math.random()-.5)*5,life:1.8+Math.random()*1.4,s:4+Math.random()*4,r:.25,g:.22,b:.2,grow:2.5,mode:2});
+  for(let i=0;i<30;i++){ // 噴濺火花
+    const a=Math.random()*Math.PI*2,sp=6+Math.random()*18;
+    fireP.spawn({x,y:y+1,z,vx:Math.cos(a)*sp,vy:4+Math.random()*12,vz:Math.sin(a)*sp,life:.7+Math.random()*1.1,s:.7+Math.random(),mode:4,grav:-9});
+  }
+  for(let i=0;i<16;i++)smokeP.spawn({x,y:y+2,z,vx:(Math.random()-.5)*5,vy:3+Math.random()*4,vz:(Math.random()-.5)*5,life:1.8+Math.random()*1.6,s:4+Math.random()*4.5,r:.22,g:.2,b:.19,grow:2.6,mode:2});
   shake=Math.min(shake+.55,1.4);
   flashEl.style.transition='none';flashEl.style.opacity=.28;
   requestAnimationFrame(()=>{flashEl.style.transition='opacity .5s';flashEl.style.opacity=0;});
@@ -1279,14 +1343,19 @@ function frame(){
   fireLight.intensity=burnGlow>0?burnGlow*13*(0.85+Math.sin(elapsed*17)*.15+Math.random()*.1):0;
   fireLight.position.set(A_WULIN[0],6,A_WULIN[1]);
   shake*=Math.exp(-3.2*dt);
-  // 水面波動
+  // 水面波動（多向疊加波，風大浪高；逐幀重算法線→流動高光）
   {
-    const arr=waterPos.array,A=.14+windNow*.22;
+    const arr=waterPos.array,A=.16+windNow*.5,et=elapsed;
     for(let i=0;i<waterPos.count;i++){
       const x=waterBase[i*3],z=waterBase[i*3+2];
-      arr[i*3+1]=Math.sin(x*.22+elapsed*1.5)*A+Math.cos(z*.3+elapsed*1.1)*A*.7;
+      arr[i*3+1]=
+        Math.sin(x*0.19+et*1.4)*A
+       +Math.cos(z*0.26+et*1.1)*A*0.7
+       +Math.sin((x*0.46+z*0.31)+et*2.1)*A*0.45
+       +Math.cos((x*0.82-z*0.55)+et*3.0)*A*0.22;
     }
     waterPos.needsUpdate=true;
+    waterGeo.computeVertexNormals();
   }
   // 烏雲飄移
   for(const c of clouds){c.position.x-=windNow*6*dt;if(c.position.x<-160)c.position.x=160;}

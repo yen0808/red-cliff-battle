@@ -256,7 +256,9 @@ const renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth,innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.25;
+renderer.toneMappingExposure=1.05;
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.5,1500);
@@ -284,8 +286,8 @@ function makePaperTex(){
 }
 const paperTex=makePaperTex();
 const GradeShader={
-  uniforms:{tDiffuse:{value:null},uVig:{value:0.42},uWarm:{value:0.12},uSat:{value:1.12},uContrast:{value:1.07},
-    uPaper:{value:paperTex},uPaperAmt:{value:0.10},uPaperScale:{value:new THREE.Vector2(4.0,2.4)}},
+  uniforms:{tDiffuse:{value:null},uVig:{value:0.28},uWarm:{value:0.08},uSat:{value:1.16},uContrast:{value:1.05},
+    uPaper:{value:paperTex},uPaperAmt:{value:0.04},uPaperScale:{value:new THREE.Vector2(4.0,2.4)}},
   vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
   fragmentShader:`uniform sampler2D tDiffuse,uPaper;uniform float uVig,uWarm,uSat,uContrast,uPaperAmt;uniform vec2 uPaperScale;varying vec2 vUv;
     void main(){
@@ -311,34 +313,61 @@ function resizePost(){
 }
 resizePost();
 
-// 水墨畫風：柔和暖紙光、偏平的環境光（壓低明暗對比）、墨色地光
-const sun=new THREE.DirectionalLight(0xf5ecd6,.85);sun.position.set(120,160,60);scene.add(sun);
-const amb=new THREE.AmbientLight(0xc2c4c0,.72);scene.add(amb);
-const hemi=new THREE.HemisphereLight(0xe9e2cf,0x6d6f68,.6);scene.add(hemi);
+// 寫實光照：強烈方向陽光（投射陰影）＋低環境光＋天空半球光
+const SUN_DIR=new THREE.Vector3(0.55,0.62,0.56).normalize();
+const sun=new THREE.DirectionalLight(0xfff1d8,2.5);
+sun.position.copy(SUN_DIR).multiplyScalar(320);
+sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
+{const c=sun.shadow.camera;c.near=20;c.far=720;c.left=-230;c.right=230;c.top=230;c.bottom=-230;}
+sun.shadow.bias=-0.0005;sun.shadow.normalBias=1.4;
+scene.add(sun);scene.add(sun.target);
+const amb=new THREE.AmbientLight(0xb8c4d2,.32);scene.add(amb);
+const hemi=new THREE.HemisphereLight(0xbcd6ee,0x59513c,.5);scene.add(hemi);
 const fireLight=new THREE.PointLight(0xff7722,0,160,1.6);fireLight.position.set(-12,8,0);scene.add(fireLight);
-scene.fog=new THREE.Fog(0xdcd5c2,130,520);
+scene.fog=new THREE.Fog(0xcdd7dd,150,560);
 
-/* 各幕氣氛（水墨宣紙天色、濃霧、光照） */
+/* 漸層天空（地平線霾色→天頂藍，含太陽輝光），可隨各幕日夜變化 */
+const SkyMat=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,
+  uniforms:{uMix:{value:0},uSun:{value:SUN_DIR.clone()},
+    dayTop:{value:new THREE.Color(0x3f72ad)},dayHor:{value:new THREE.Color(0xd2dde2)},
+    nightTop:{value:new THREE.Color(0x0d1320)},nightHor:{value:new THREE.Color(0x29303d)},
+    sunCol:{value:new THREE.Color(0xfff0d2)}},
+  vertexShader:`varying vec3 vD;void main(){vD=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+  fragmentShader:`varying vec3 vD;uniform float uMix;uniform vec3 uSun,dayTop,dayHor,nightTop,nightHor,sunCol;
+    void main(){vec3 d=normalize(vD);float h=clamp(d.y,0.,1.);
+      vec3 top=mix(dayTop,nightTop,uMix),hor=mix(dayHor,nightHor,uMix);
+      vec3 col=mix(hor,top,smoothstep(0.0,0.6,h));
+      float s=max(dot(d,normalize(uSun)),0.0);
+      col+=(1.0-uMix)*sunCol*(pow(s,90.0)*2.2+pow(s,9.0)*0.28);
+      gl_FragColor=vec4(col,1.0);}`});
+const skyDome=new THREE.Mesh(new THREE.SphereGeometry(4000,32,16),SkyMat);scene.add(skyDome);
+// 由天空產生環境貼圖（IBL）：讓 PBR 材質有真實的反射與環境光
+const pmrem=new THREE.PMREMGenerator(renderer);pmrem.compileEquirectangularShader();
+// 此刻 scene 只有天空與燈光（地形等尚未建立），用它烘出乾淨的天空環境貼圖
+scene.environment=pmrem.fromScene(scene,0,1,8000).texture;
+
+/* 各幕氣氛：日夜混合(skyMix 0=晴日→1=夜)、陽光強度、曝光、霧色 */
 const AMBS=[
- {sky:0xdcd5c2,sunI:.85,sunC:0xf5ecd6,ambI:.72,fog:[130,540]},
- {sky:0xdcd5c2,sunI:.85,sunC:0xf5ecd6,ambI:.72,fog:[130,540]},
- {sky:0xd3cdba,sunI:.8,sunC:0xf0e6cf,ambI:.7,fog:[120,520]},
- {sky:0xd9c4a0,sunI:.78,sunC:0xf3d9aa,ambI:.66,fog:[110,500]},
- {sky:0xcdb692,sunI:.7,sunC:0xf0cf98,ambI:.62,fog:[100,470]},
- {sky:0x9ba0a2,sunI:.55,sunC:0xcdd2d6,ambI:.6,fog:[90,440]},
- {sky:0x2c3340,sunI:.28,sunC:0x9aa6c4,ambI:.42,fog:[80,400]},
- {sky:0xb6b8ae,sunI:.6,sunC:0xdcd6c6,ambI:.62,fog:[100,460]},
+ {mix:0.0,sunI:2.6,sunC:0xfff1d8,ambI:.34,expo:1.06,fog:0xcdd7dd,fogN:170,fogF:580},
+ {mix:0.0,sunI:2.6,sunC:0xfff1d8,ambI:.34,expo:1.06,fog:0xcdd7dd,fogN:170,fogF:580},
+ {mix:0.12,sunI:2.4,sunC:0xffeccc,ambI:.34,expo:1.04,fog:0xc6cfd4,fogN:160,fogF:560},
+ {mix:0.42,sunI:2.0,sunC:0xffd9a6,ambI:.36,expo:1.0,fog:0xc9b89c,fogN:150,fogF:520},
+ {mix:0.58,sunI:1.7,sunC:0xffcf95,ambI:.36,expo:.97,fog:0xb8a487,fogN:140,fogF:500},
+ {mix:0.7,sunI:1.2,sunC:0xcdd6dc,ambI:.4,expo:.95,fog:0x8d949a,fogN:120,fogF:460},
+ {mix:1.0,sunI:.45,sunC:0x9fb0d0,ambI:.3,expo:.82,fog:0x141a26,fogN:90,fogF:400},
+ {mix:0.5,sunI:1.3,sunC:0xe2dccb,ambI:.42,expo:.98,fog:0x9aa0a0,fogN:120,fogF:480},
 ];
 const _c1=new THREE.Color(),_c2=new THREE.Color();
 function applyAmb(idx,t){
   const a=AMBS[idx],p=AMBS[Math.max(0,idx-1)];
-  const m=smooth(t/0.25); // 每幕前 25% 漸變
-  _c1.setHex(p.sky).lerp(_c2.setHex(a.sky),m);
-  scene.background=_c1.clone();scene.fog.color.copy(_c1);
-  scene.fog.near=lerp(p.fog[0],a.fog[0],m);scene.fog.far=lerp(p.fog[1],a.fog[1],m);
+  const m=smooth(t/0.25);
+  SkyMat.uniforms.uMix.value=lerp(p.mix,a.mix,m);
   sun.intensity=lerp(p.sunI,a.sunI,m);
   sun.color.setHex(p.sunC).lerp(_c2.setHex(a.sunC),m);
   amb.intensity=lerp(p.ambI,a.ambI,m);
+  renderer.toneMappingExposure=lerp(p.expo,a.expo,m);
+  _c1.setHex(p.fog).lerp(_c2.setHex(a.fog),m);scene.fog.color.copy(_c1);
+  scene.fog.near=lerp(p.fogN,a.fogN,m);scene.fog.far=lerp(p.fogF,a.fogF,m);
 }
 
 /* ============ 地形 ============ */
@@ -367,16 +396,18 @@ function applyAmb(idx,t){
   }
   g.setAttribute('color',new THREE.BufferAttribute(colors,3));
   g.computeVertexNormals();
-  scene.add(new THREE.Mesh(g,new THREE.MeshLambertMaterial({vertexColors:true})));
+  const terrain=new THREE.Mesh(g,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.96,metalness:0,envMapIntensity:.4}));
+  terrain.receiveShadow=true;terrain.castShadow=true;scene.add(terrain);
 }
 /* 水面（寫實江水：多重波浪、逐幀重算法線產生流動高光與反光） */
 let water,waterPos,waterBase,waterGeo;
 {
-  waterGeo=new THREE.PlaneGeometry(360,250,140,96);waterGeo.rotateX(-Math.PI/2);
-  water=new THREE.Mesh(waterGeo,new THREE.MeshPhongMaterial({
-    color:0x2c5663,transparent:true,opacity:.9,shininess:160,specular:0xcfeaf0,
-    emissive:0x0e2128,emissiveIntensity:.35}));
-  water.position.y=0;scene.add(water);
+  waterGeo=new THREE.PlaneGeometry(360,250,120,82);waterGeo.rotateX(-Math.PI/2);
+  // 寫實水面：低粗糙度→反射天空環境貼圖；逐幀波動法線→流動倒影與陽光鱗光
+  water=new THREE.Mesh(waterGeo,new THREE.MeshStandardMaterial({
+    color:0x183c49,roughness:.17,metalness:.0,transparent:true,opacity:.94,
+    envMapIntensity:1.0}));
+  water.receiveShadow=true;water.position.y=0;scene.add(water);
   waterPos=waterGeo.attributes.position;waterBase=waterPos.array.slice();
 }
 /* 遠山天幕（Canva 水墨遠山，亮處已轉透明，環繞全場、隨霧淡入） */
@@ -459,9 +490,9 @@ for(const [name,x,z] of PLACES){
   }
   const broad=trees.filter(t=>!t.pine),pine=trees.filter(t=>t.pine);
   const trunkG=new THREE.CylinderGeometry(.12,.34,3,6);trunkG.translate(0,1.5,0);
-  const trunkInst=new THREE.InstancedMesh(trunkG,new THREE.MeshLambertMaterial({color:0x4f3a28}),trees.length);
-  const leafInst=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,1),new THREE.MeshLambertMaterial({color:0xffffff}),broad.length*3);
-  const pineInst=new THREE.InstancedMesh(new THREE.ConeGeometry(1,1.7,8),new THREE.MeshLambertMaterial({color:0xffffff}),pine.length*3);
+  const trunkInst=new THREE.InstancedMesh(trunkG,new THREE.MeshStandardMaterial({color:0x4f3a28,roughness:.95,metalness:0}),trees.length);
+  const leafInst=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,1),new THREE.MeshStandardMaterial({color:0xffffff,roughness:.9,metalness:0,flatShading:true}),broad.length*3);
+  const pineInst=new THREE.InstancedMesh(new THREE.ConeGeometry(1,1.7,8),new THREE.MeshStandardMaterial({color:0xffffff,roughness:.92,metalness:0,flatShading:true}),pine.length*3);
   const m=new THREE.Matrix4(),q=new THREE.Quaternion(),eu=new THREE.Euler(),pv=new THREE.Vector3(),sv=new THREE.Vector3(),col=new THREE.Color();
   let ti=0,li=0,pi=0;
   for(const t of trees){
@@ -486,7 +517,7 @@ for(const [name,x,z] of PLACES){
 
 /* ============ 船艦（中式戰船：弧形船身、高聳船樓、舷牆、雙桅硬篷帆） ============ */
 const SHIP_WOOD=0x6b4a2f;
-const hullMatBase=new THREE.MeshLambertMaterial({color:SHIP_WOOD});
+const hullMatBase=new THREE.MeshStandardMaterial({color:SHIP_WOOD,roughness:.82,metalness:0});
 // 硬篷帆紋理：篷布底＋橫向竹篾（batten）與帆骨
 function makeSailTex(fire){
   const W=128,H=160,cv=document.createElement('canvas');cv.width=W;cv.height=H;const x=cv.getContext('2d');
@@ -503,9 +534,9 @@ const sailTexN=makeSailTex(false),sailTexF=makeSailTex(true);
 function makeShip(fac,{large=false,fire=false}={}){
   const g=new THREE.Group();const s=large?1.5:1;
   const hullMat=hullMatBase.clone();                                   // 受燒時染色用
-  const deckMat=new THREE.MeshLambertMaterial({color:0x9c7a4a});
-  const trimMat=new THREE.MeshLambertMaterial({color:0x82603a});
-  const darkMat=new THREE.MeshLambertMaterial({color:0x4a3526});
+  const deckMat=new THREE.MeshStandardMaterial({color:0x9c7a4a,roughness:.85,metalness:0});
+  const trimMat=new THREE.MeshStandardMaterial({color:0x82603a,roughness:.8,metalness:0});
+  const darkMat=new THREE.MeshStandardMaterial({color:0x4a3526,roughness:.8,metalness:0});
   // 船身主體
   const hull=new THREE.Mesh(new THREE.BoxGeometry(6.2*s,1.5*s,2.4*s),hullMat);hull.position.y=.78*s;g.add(hull);
   const bilge=new THREE.Mesh(new THREE.BoxGeometry(5.2*s,.7*s,1.5*s),hullMat);bilge.position.y=.12*s;g.add(bilge);
@@ -519,8 +550,8 @@ function makeShip(fac,{large=false,fire=false}={}){
   const castle=new THREE.Mesh(new THREE.BoxGeometry(1.7*s,1.9*s,2.5*s),trimMat);castle.position.set(-2.5*s,2.05*s,0);g.add(castle);
   const roof=new THREE.Mesh(new THREE.BoxGeometry(2.1*s,.28*s,2.9*s),darkMat);roof.position.set(-2.5*s,3.1*s,0);g.add(roof);
   // 雙桅＋硬篷帆
-  const sailMat=new THREE.MeshLambertMaterial({map:fire?sailTexF:sailTexN,color:fire?0xd8c79a:0xffffff,side:THREE.DoubleSide,transparent:true});
-  const mastMat=new THREE.MeshLambertMaterial({color:0x4a3a28});
+  const sailMat=new THREE.MeshStandardMaterial({map:fire?sailTexF:sailTexN,color:fire?0xd8c79a:0xffffff,roughness:.95,metalness:0,side:THREE.DoubleSide,transparent:true});
+  const mastMat=new THREE.MeshStandardMaterial({color:0x4a3a28,roughness:.8,metalness:0});
   function rig(mx,mh,sw,sh){
     const mast=new THREE.Mesh(new THREE.CylinderGeometry(.1*s,.15*s,mh,6),mastMat);mast.position.set(mx,mh*0.5,0);g.add(mast);
     const sail=new THREE.Mesh(new THREE.PlaneGeometry(sw*s,sh*s),sailMat);sail.position.set(mx-0.05*s,mh*0.62,0);sail.rotation.y=Math.PI/2;g.add(sail);
@@ -533,7 +564,7 @@ function makeShip(fac,{large=false,fire=false}={}){
   const flag=new THREE.Mesh(new THREE.PlaneGeometry(1.7*s,1.2*s),new THREE.MeshBasicMaterial({map:flagTex[fac],side:THREE.DoubleSide,transparent:true}));
   flag.position.set(-0.5*s+0.95*s,7.7*s,0);g.add(flag);
   if(fire){ // 柴草膏油
-    const hayMat=new THREE.MeshLambertMaterial({color:0xc8a84e});
+    const hayMat=new THREE.MeshStandardMaterial({color:0xc8a84e,roughness:.9,metalness:0});
     for(let k=0;k<4;k++){const hay=new THREE.Mesh(new THREE.BoxGeometry(1.3,.9,1.7),hayMat);hay.position.set(-2.2+k*1.4,1.95,0);g.add(hay);}
   }
   g.userData={fac,hullMat,sailMat,flag,burn:0,sink:0,baseColor:new THREE.Color(SHIP_WOOD)};
@@ -1112,8 +1143,9 @@ function setupBoard(){
   clouds.forEach(c=>c.material.opacity=0);
 }
 function setCmdAmbiance(){
-  scene.background=new THREE.Color(0x8b8f8a);scene.fog.color.set(0x8b8f8a);scene.fog.near=110;scene.fog.far=470;
-  sun.intensity=.62;sun.color.set(0xe7e0cd);amb.intensity=.66;
+  SkyMat.uniforms.uMix.value=0.62;renderer.toneMappingExposure=0.95;
+  scene.fog.color.set(0x8d9298);scene.fog.near=120;scene.fog.far=470;
+  sun.intensity=1.5;sun.color.set(0xe7d8c0);amb.intensity=.4;
 }
 function syncOrderBtns(){
   document.querySelectorAll('#cmdPanel .ord').forEach(b=>b.classList.toggle('on',b.dataset.ord===CMD.order));
@@ -1411,6 +1443,14 @@ function beginShow(){
   if(appMode==='history'){playing=true;btnPlay.textContent='⏸ 暫停';}
 }
 startBtn.onclick=beginShow;
+// 開啟陰影：除了天空、遠山天幕、水面外，所有實體投射並接收陰影
+scene.traverse(o=>{
+  if(o.isMesh||o.isInstancedMesh){
+    const back=o.material&&o.material.side===THREE.BackSide;
+    o.receiveShadow=true;
+    o.castShadow=!back&&o!==water&&o!==skyDome;
+  }
+});
 const startApp=()=>{
   frame(); // 開始算圖：標題畫面後方已是 T=0 的戰場
   setTimeout(()=>{loadmsg.textContent='';startBtn.classList.add('ready');},400);
